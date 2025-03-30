@@ -1,6 +1,9 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
 import { Entity } from './Entity.js';
 import { Weapon } from '../items/Weapon.js';
+import { Staff } from '../items/weapons/Staff.js';
+import { Bow } from '../items/weapons/Bow.js';
+import { Axe } from '../items/weapons/Axe.js';
 
 export class Player extends Entity {
   constructor(game) {
@@ -30,6 +33,9 @@ export class Player extends Entity {
     
     // Create player mesh
     this.createMesh();
+    
+    // Give the player a random starting weapon
+    this.giveRandomStartingWeapon();
   }
   
   createMesh() {
@@ -262,35 +268,124 @@ export class Player extends Entity {
   addToInventory(item) {
     this.inventory.push(item);
     
-    // Update UI
-    this.game.ui.updateInventory();
+    // Update UI if it exists
+    if (this.game.ui) {
+      this.game.ui.updateInventory();
+    }
   }
   
   equipItem(item) {
-    if (item instanceof Weapon) {
-      // Unequip previous weapon if exists
-      if (this.equipment.weapon) {
-        // Remove the weapon mesh from the container
-        this.weaponContainer.remove(this.equipment.weapon.mesh);
+    try {
+      if (!item) {
+        console.warn('Cannot equip null item');
+        return;
+      }
+      
+      if (item instanceof Weapon) {
+        // Unequip previous weapon if exists
+        if (this.equipment.weapon) {
+          // Remove the weapon mesh from the container
+          if (this.weaponContainer && this.equipment.weapon.mesh) {
+            this.weaponContainer.remove(this.equipment.weapon.mesh);
+          }
+          
+          // Add previous weapon back to inventory
+          this.inventory.push(this.equipment.weapon);
+        }
         
-        // Add previous weapon back to inventory
-        this.inventory.push(this.equipment.weapon);
+        // Equip new weapon
+        this.equipment.weapon = item;
+        
+        // Remove from inventory
+        const index = this.inventory.indexOf(item);
+        if (index !== -1) {
+          this.inventory.splice(index, 1);
+        }
+        
+        // Add the weapon mesh to the container
+        if (this.weaponContainer && item.mesh) {
+          this.weaponContainer.add(item.mesh);
+        } else {
+          console.warn('Cannot add weapon mesh: container or mesh is missing');
+        }
+        
+        // Update UI if it exists
+        if (this.game.ui) {
+          this.game.ui.updateInventory();
+        }
+      }
+    } catch (error) {
+      console.warn('Error equipping item:', error.message);
+    }
+  }
+  
+  giveRandomStartingWeapon() {
+    try {
+      // Choose a random weapon type
+      const weaponTypes = [Staff, Bow, Axe];
+      const WeaponClass = weaponTypes[Math.floor(Math.random() * weaponTypes.length)];
+      
+      // Determine rarity (better chance for magic/rare than normal loot)
+      let rarity = 'normal';
+      const rarityRoll = Math.random();
+      
+      if (rarityRoll < 0.2) {
+        rarity = 'rare';
+      } else if (rarityRoll < 0.6) {
+        rarity = 'magic';
       }
       
-      // Equip new weapon
-      this.equipment.weapon = item;
+      console.log(`Starting with ${rarity} ${WeaponClass.name}`);
       
-      // Remove from inventory
-      const index = this.inventory.indexOf(item);
-      if (index !== -1) {
-        this.inventory.splice(index, 1);
+      // Create the weapon
+      const weapon = new WeaponClass(this.game, {
+        id: 'starting-weapon',
+        rarity,
+        position: new THREE.Vector3()
+      });
+      
+      // Add attributes based on rarity (only if itemManager is initialized)
+      if (this.game.itemManager && this.game.itemManager.attributePool) {
+        if (rarity === 'magic') {
+          this.addRandomAttributesToWeapon(weapon, 1);
+        } else if (rarity === 'rare') {
+          this.addRandomAttributesToWeapon(weapon, 2);
+        }
       }
       
-      // Add the weapon mesh to the container
-      this.weaponContainer.add(item.mesh);
+      // Equip the weapon (this will handle missing UI)
+      this.equipItem(weapon);
+    } catch (error) {
+      console.warn("Could not give starting weapon:", error.message);
+    }
+  }
+  
+  addRandomAttributesToWeapon(weapon, count) {
+    // Make sure weapon and itemManager exist
+    if (!weapon || !this.game.itemManager || !this.game.itemManager.attributePool) {
+      console.warn('Cannot add attributes: weapon or attribute pool is missing');
+      return;
+    }
+
+    try {
+      // Clone the attribute pool from ItemManager
+      const attributePool = [...this.game.itemManager.attributePool];
       
-      // Update UI
-      this.game.ui.updateInventory();
+      for (let i = 0; i < count; i++) {
+        if (attributePool.length === 0) break;
+        
+        // Select random attribute
+        const index = Math.floor(Math.random() * attributePool.length);
+        const attribute = attributePool.splice(index, 1)[0];
+        
+        // Add attribute to weapon
+        if (!weapon.attributes) {
+          weapon.attributes = [];
+        }
+        weapon.attributes.push({...attribute});
+      }
+    } catch (error) {
+      console.warn('Error adding attributes to weapon:', error.message);
     }
   }
 } 

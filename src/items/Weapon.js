@@ -10,6 +10,9 @@ export class Weapon extends Item {
     this.attackSpeed = options.attackSpeed || 1.0;
     this.range = options.range || 1.5;
     
+    // Ensure attributes array is initialized
+    this.attributes = options.attributes || [];
+    
     // Visual effects
     this.trailEffect = null;
   }

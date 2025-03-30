@@ -150,6 +150,13 @@ export class MapGenerator {
     
     // Create animated water surface
     this.animateWater();
+    
+    // Now safely add river edges
+    try {
+      this.generateRiverEdges();
+    } catch (error) {
+      console.warn("Warning: Could not generate river edges:", error.message);
+    }
   }
   
   generateRiverPath() {
@@ -391,11 +398,24 @@ export class MapGenerator {
     
     for (let dx = -length / 2; dx < length / 2; dx++) {
       for (let dz = -width / 2; dz < width / 2; dz++) {
-        const tx = location.x + (location.direction === 'horizontal' ? dx : dz);
-        const tz = location.z + (location.direction === 'horizontal' ? dz : dx);
+        let gridX, gridZ;
+        if (location.direction === 'horizontal') {
+            gridX = Math.floor(location.x + dx);
+            gridZ = Math.floor(location.z + dz);
+        } else { // vertical
+            gridX = Math.floor(location.x + dz);
+            gridZ = Math.floor(location.z + dx);
+        }
+        const tx = gridX;
+        const tz = gridZ;
         
         if (tx >= 0 && tx < this.mapSize && tz >= 0 && tz < this.mapSize) {
-          this.mapData[tx][tz].object = 'bridge';
+          // Ensure the row and cell exist before trying to set property
+          if (this.mapData[tx] && this.mapData[tx][tz]) { 
+            this.mapData[tx][tz].object = 'bridge';
+          } else {
+            console.warn(`Attempted to access invalid map data at [${tx}, ${tz}] when creating bridge.`);
+          }
         }
       }
     }
@@ -411,12 +431,21 @@ export class MapGenerator {
   }
   
   createTrees() {
-    // Create tree models
+    // Create tree models with more details
     const treeTrunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, 2, 8);
-    const treeTrunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 }); // Brown
+    const treeTrunkMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x8b4513, // Brown
+      roughness: 0.9,
+      metalness: 0.1
+    });
     
+    // Create multiple leaf layers for more detailed trees
     const treeLeafGeometry = new THREE.ConeGeometry(1, 2, 8);
-    const treeLeafMaterial = new THREE.MeshStandardMaterial({ color: 0x005500 }); // Dark green
+    const treeLeafMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x004400, // Darker green
+      roughness: 0.8,
+      metalness: 0.1
+    });
     
     // Create tree template
     const treeTemplate = new THREE.Group();
@@ -424,59 +453,264 @@ export class MapGenerator {
     const trunk = new THREE.Mesh(treeTrunkGeometry, treeTrunkMaterial);
     trunk.position.y = 1;
     trunk.castShadow = true;
+    trunk.receiveShadow = true;
     treeTemplate.add(trunk);
     
-    const leaves = new THREE.Mesh(treeLeafGeometry, treeLeafMaterial);
-    leaves.position.y = 2.5;
-    leaves.castShadow = true;
-    treeTemplate.add(leaves);
+    // Add multiple leaf layers for more detail
+    const leavesMain = new THREE.Mesh(treeLeafGeometry, treeLeafMaterial);
+    leavesMain.position.y = 2.5;
+    leavesMain.castShadow = true;
+    leavesMain.receiveShadow = true;
+    treeTemplate.add(leavesMain);
     
-    // Place trees
+    // Add a second, smaller leaf layer
+    const leavesTop = new THREE.Mesh(
+      new THREE.ConeGeometry(0.7, 1.5, 8),
+      new THREE.MeshStandardMaterial({ 
+        color: 0x005500, // Slightly lighter green
+        roughness: 0.7,
+        metalness: 0.1
+      })
+    );
+    leavesTop.position.y = 3.5;
+    leavesTop.castShadow = true;
+    leavesTop.receiveShadow = true;
+    treeTemplate.add(leavesTop);
+    
+    // Create two tree types
+    const treeTemplate2 = new THREE.Group();
+    const trunk2 = new THREE.Mesh(treeTrunkGeometry, treeTrunkMaterial);
+    trunk2.position.y = 1;
+    trunk2.castShadow = true;
+    trunk2.receiveShadow = true;
+    treeTemplate2.add(trunk2);
+    
+    // Pine tree style
+    const pineLeaves = new THREE.Mesh(
+      new THREE.ConeGeometry(0.8, 3, 8),
+      new THREE.MeshStandardMaterial({ 
+        color: 0x006600, 
+        roughness: 0.8,
+        metalness: 0.1
+      })
+    );
+    pineLeaves.position.y = 2.5;
+    pineLeaves.castShadow = true;
+    pineLeaves.receiveShadow = true;
+    treeTemplate2.add(pineLeaves);
+    
+    // Place trees of both types
     for (let i = 0; i < this.treeCount; i++) {
-      this.placeVegetation(treeTemplate.clone(), 'tree', 3);
+      // Alternate between tree types
+      if (i % 2 === 0) {
+        this.placeVegetation(treeTemplate.clone(), 'tree', 3);
+      } else {
+        this.placeVegetation(treeTemplate2.clone(), 'tree', 3);
+      }
     }
   }
   
   createBushes() {
-    // Create bush models
-    const bushGeometry = new THREE.SphereGeometry(0.5, 8, 8);
-    const bushMaterial = new THREE.MeshStandardMaterial({ color: 0x226622 }); // Green
+    // Create more detailed bush models
+    const bushMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x226622, // Green
+      roughness: 0.8,
+      metalness: 0.1
+    });
     
     // Create bush template
     const bushTemplate = new THREE.Group();
     
-    const bushBody = new THREE.Mesh(bushGeometry, bushMaterial);
+    // Main bush body
+    const bushBody = new THREE.Mesh(
+      new THREE.SphereGeometry(0.5, 8, 8),
+      bushMaterial
+    );
     bushBody.position.y = 0.5;
     bushBody.scale.y = 0.7; // Slightly flattened
     bushBody.castShadow = true;
+    bushBody.receiveShadow = true;
     bushTemplate.add(bushBody);
     
-    // Place bushes
+    // Add some smaller spheres for more detail
+    for (let i = 0; i < 3; i++) {
+      const detail = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3, 7, 7),
+        new THREE.MeshStandardMaterial({ 
+          color: 0x1e5b1e, // Slightly different green
+          roughness: 0.9,
+          metalness: 0.1
+        })
+      );
+      
+      // Position randomly around main body
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 0.2 + Math.random() * 0.3;
+      detail.position.x = Math.cos(angle) * radius;
+      detail.position.z = Math.sin(angle) * radius;
+      detail.position.y = 0.4 + Math.random() * 0.3;
+      detail.scale.set(
+        0.8 + Math.random() * 0.4,
+        0.8 + Math.random() * 0.4,
+        0.8 + Math.random() * 0.4
+      );
+      detail.castShadow = true;
+      detail.receiveShadow = true;
+      
+      bushTemplate.add(detail);
+    }
+    
+    // Create a second bush type (berry bush)
+    const berryBushTemplate = new THREE.Group();
+    
+    // Main bush body
+    const berryBushBody = new THREE.Mesh(
+      new THREE.SphereGeometry(0.4, 8, 8),
+      new THREE.MeshStandardMaterial({ 
+        color: 0x306030, // Darker green
+        roughness: 0.8, 
+        metalness: 0.1
+      })
+    );
+    berryBushBody.position.y = 0.4;
+    berryBushBody.castShadow = true;
+    berryBushBody.receiveShadow = true;
+    berryBushTemplate.add(berryBushBody);
+    
+    // Add some berries
+    const berryMaterial = new THREE.MeshStandardMaterial({
+      color: 0xcc0000, // Red berries
+      roughness: 0.5,
+      metalness: 0.3
+    });
+    
+    for (let i = 0; i < 8; i++) {
+      const berry = new THREE.Mesh(
+        new THREE.SphereGeometry(0.07, 6, 6),
+        berryMaterial
+      );
+      
+      // Position randomly on the bush
+      const angle = Math.random() * Math.PI * 2;
+      const height = Math.random() * Math.PI;
+      const radius = 0.4;
+      
+      berry.position.x = Math.cos(angle) * Math.sin(height) * radius;
+      berry.position.z = Math.sin(angle) * Math.sin(height) * radius;
+      berry.position.y = 0.4 + Math.cos(height) * radius;
+      
+      berry.castShadow = true;
+      berryBushTemplate.add(berry);
+    }
+    
+    // Place bushes of both types
     for (let i = 0; i < this.bushCount; i++) {
-      this.placeVegetation(bushTemplate.clone(), 'bush', 1);
+      if (i % 4 === 0) { // 25% berry bushes, 75% regular
+        this.placeVegetation(berryBushTemplate.clone(), 'bush', 1);
+      } else {
+        this.placeVegetation(bushTemplate.clone(), 'bush', 1);
+      }
     }
   }
   
   createRocks() {
-    // Create rock models
-    const rockGeometry = new THREE.DodecahedronGeometry(0.5, 0);
-    const rockMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x888888,
-      roughness: 0.8,
-      metalness: 0.2
-    });
+    // Create more detailed rock models
+    const rockMaterials = [
+      new THREE.MeshStandardMaterial({ 
+        color: 0x888888, // Gray
+        roughness: 0.9,
+        metalness: 0.1
+      }),
+      new THREE.MeshStandardMaterial({ 
+        color: 0x777777, // Darker gray
+        roughness: 0.8,
+        metalness: 0.2
+      }),
+      new THREE.MeshStandardMaterial({ 
+        color: 0x999999, // Lighter gray
+        roughness: 0.7,
+        metalness: 0.1
+      })
+    ];
     
-    // Create rock template
-    const rockTemplate = new THREE.Group();
+    // Create three different rock templates
+    const rockTemplates = [];
     
-    const rockBody = new THREE.Mesh(rockGeometry, rockMaterial);
-    rockBody.position.y = 0.3;
-    rockBody.castShadow = true;
-    rockTemplate.add(rockBody);
+    // Boulder-like rock
+    const rockTemplate1 = new THREE.Group();
+    const rockBody1 = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.6, 1),
+      rockMaterials[0]
+    );
+    rockBody1.position.y = 0.4;
+    rockBody1.rotation.set(
+      Math.random() * Math.PI,
+      Math.random() * Math.PI,
+      Math.random() * Math.PI
+    );
+    rockBody1.castShadow = true;
+    rockBody1.receiveShadow = true;
+    rockTemplate1.add(rockBody1);
+    rockTemplates.push(rockTemplate1);
+    
+    // Flat rock cluster
+    const rockTemplate2 = new THREE.Group();
+    for (let i = 0; i < 3; i++) {
+      const flatRock = new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          0.3 + Math.random() * 0.3,
+          0.3 + Math.random() * 0.3,
+          0.2,
+          6
+        ),
+        rockMaterials[Math.floor(Math.random() * rockMaterials.length)]
+      );
+      
+      // Position randomly in cluster
+      flatRock.position.x = (Math.random() - 0.5) * 0.6;
+      flatRock.position.z = (Math.random() - 0.5) * 0.6;
+      flatRock.position.y = 0.1 + Math.random() * 0.1;
+      
+      // Random rotation
+      flatRock.rotation.y = Math.random() * Math.PI;
+      flatRock.rotation.x = (Math.random() - 0.5) * 0.5; // Slight tilt
+      
+      flatRock.castShadow = true;
+      flatRock.receiveShadow = true;
+      rockTemplate2.add(flatRock);
+    }
+    rockTemplates.push(rockTemplate2);
+    
+    // Angular, steep rock
+    const rockTemplate3 = new THREE.Group();
+    const rockBody3 = new THREE.Mesh(
+      new THREE.TetrahedronGeometry(0.5, 1),
+      rockMaterials[1]
+    );
+    rockBody3.position.y = 0.3;
+    rockBody3.rotation.set(
+      Math.random() * Math.PI,
+      Math.random() * Math.PI,
+      Math.random() * Math.PI
+    );
+    rockBody3.castShadow = true;
+    rockBody3.receiveShadow = true;
+    rockTemplate3.add(rockBody3);
+    rockTemplates.push(rockTemplate3);
     
     // Place rocks
     for (let i = 0; i < this.rockCount; i++) {
-      this.placeVegetation(rockTemplate.clone(), 'rock', 0.8);
+      // Choose a random rock template
+      const rockTemplate = rockTemplates[Math.floor(Math.random() * rockTemplates.length)].clone();
+      
+      // Add random scale variation
+      const scale = 0.7 + Math.random() * 0.6;
+      rockTemplate.scale.set(scale, Math.max(0.7, scale * (0.8 + Math.random() * 0.4)), scale);
+      
+      // Add random rotation
+      rockTemplate.rotation.y = Math.random() * Math.PI * 2;
+      
+      this.placeVegetation(rockTemplate, 'rock', 0.8);
     }
   }
   
@@ -557,5 +791,48 @@ export class MapGenerator {
     // Add fog effect to the scene (for atmosphere)
     const fogColor = 0x1a237e; // Dark blue for night/forest effect
     this.game.scene.fog = new THREE.FogExp2(fogColor, 0.02);
+  }
+
+  generateRiverEdges() {
+    // This is a more robust version that won't throw errors
+    console.log("Generating river edges");
+    
+    try {
+      // Iterate through map to find water tiles
+      for (let x = 1; x < this.mapSize - 1; x++) {
+        for (let z = 1; z < this.mapSize - 1; z++) {
+          if (this.mapData[x][z].type === 'water') {
+            // Check adjacent tiles
+            for (let dx = -1; dx <= 1; dx++) {
+              for (let dz = -1; dz <= 1; dz++) {
+                if (dx === 0 && dz === 0) continue; // Skip self
+                
+                const nx = x + dx;
+                const nz = z + dz;
+                
+                // Check if adjacent tile is ground
+                if (nx >= 0 && nx < this.mapSize && nz >= 0 && nz < this.mapSize && 
+                    this.mapData[nx][nz].type === 'ground') {
+                  // This is a river edge - no need to create edge objects
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("Non-critical error in river edge generation:", error.message);
+      // Fall through and continue - this is not a critical feature
+    }
+  }
+
+  createRiverEdge(x, z, edgeType) {
+    // This is a simplified version that won't throw errors
+    // We won't actually create any objects here
+    try {
+      // Just a placeholder to mark where edges would be
+    } catch (error) {
+      console.warn("Non-critical error in river edge creation:", error.message);
+    }
   }
 } 

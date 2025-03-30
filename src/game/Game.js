@@ -54,40 +54,33 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     document.body.appendChild(this.renderer.domElement);
-    
-    // Initialize game components
-    this.mapGenerator = new MapGenerator(this);
-    this.mapGenerator.generateMap();
-    
-    this.player = new Player(this);
-    this.scene.add(this.player.mesh);
-    
-    this.enemyManager = new EnemyManager(this);
-    this.enemyManager.spawnInitialEnemies();
-    
-    this.itemManager = new ItemManager(this);
-    
-    this.inputHandler = new InputHandler(this);
-    this.ui = new UI(this);
   }
   
   update() {
     const delta = this.clock.getDelta();
     
     // Update player
-    this.player.update(delta);
+    if (this.player) {
+      this.player.update(delta);
+    }
     
     // Update enemies
-    this.enemyManager.update(delta);
+    if (this.enemyManager) {
+      this.enemyManager.update(delta);
+    }
     
     // Update items
-    this.itemManager.update(delta);
+    if (this.itemManager) {
+      this.itemManager.update(delta);
+    }
     
     // Update camera to follow player
     this.updateCamera();
     
     // Update UI
-    this.ui.update();
+    if (this.ui) {
+      this.ui.update();
+    }
   }
   
   updateCamera() {
@@ -100,7 +93,9 @@ export class Game {
   }
   
   render() {
-    this.renderer.render(this.scene, this.camera);
+    if (this.scene && this.camera) {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
   
   onWindowResize() {
@@ -112,18 +107,26 @@ export class Game {
   }
   
   onKeyDown(event) {
-    this.inputHandler.handleKeyDown(event);
+    if (this.inputHandler) {
+      this.inputHandler.handleKeyDown(event);
+    }
   }
   
   onKeyUp(event) {
-    this.inputHandler.handleKeyUp(event);
+    if (this.inputHandler) {
+      this.inputHandler.handleKeyUp(event);
+    }
   }
   
   onMouseMove(event) {
-    this.inputHandler.handleMouseMove(event);
+    if (this.inputHandler) {
+      this.inputHandler.handleMouseMove(event);
+    }
   }
   
   onClick(event) {
-    this.inputHandler.handleClick(event);
+    if (this.inputHandler) {
+      this.inputHandler.handleClick(event);
+    }
   }
 } 

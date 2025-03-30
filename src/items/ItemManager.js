@@ -90,18 +90,33 @@ export class ItemManager {
   }
   
   addRandomAttributes(item, count) {
-    // Get random attributes from pool
-    const availableAttributes = [...this.attributePool];
-    
-    for (let i = 0; i < count; i++) {
-      if (availableAttributes.length === 0) break;
+    try {
+      if (!item || !item.attributes) {
+        console.warn('Invalid item or missing attributes array');
+        return;
+      }
       
-      // Select random attribute
-      const index = Math.floor(Math.random() * availableAttributes.length);
-      const attribute = availableAttributes.splice(index, 1)[0];
+      // Ensure we have attributes in the pool
+      if (!this.attributePool || !this.attributePool.length) {
+        console.warn('Attribute pool is empty or undefined');
+        return;
+      }
       
-      // Add attribute to item
-      item.attributes.push({...attribute});
+      // Get random attributes from pool
+      const availableAttributes = [...this.attributePool];
+      
+      for (let i = 0; i < count; i++) {
+        if (availableAttributes.length === 0) break;
+        
+        // Select random attribute
+        const index = Math.floor(Math.random() * availableAttributes.length);
+        const attribute = availableAttributes.splice(index, 1)[0];
+        
+        // Add attribute to item
+        item.attributes.push({...attribute});
+      }
+    } catch (error) {
+      console.warn('Error adding random attributes:', error.message);
     }
   }
   
