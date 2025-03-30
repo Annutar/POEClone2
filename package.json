@@ -1,0 +1,18 @@
+{
+  "name": "poe-clone",
+  "version": "1.0.0",
+  "description": "Isometric action RPG inspired by Path of Exile",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.161.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "vite": "^5.1.4"
+  }
+} 

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Path of Exile Clone</title>
+  <link rel="icon" href="data:,">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+    }
+    canvas {
+      display: block;
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: Arial, sans-serif;
+      pointer-events: none;
+    }
+    #inventory {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      width: 300px;
+      height: 200px;
+      background-color: rgba(0, 0, 0, 0.7);
+      border: 1px solid #444;
+      color: white;
+      padding: 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div id="health">Health: 100/100</div>
+    <div id="mana">Mana: 100/100</div>
+  </div>
+  <div id="inventory"></div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html> 
