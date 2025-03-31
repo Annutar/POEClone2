@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
 import { Enemy } from './Enemy.js';
+import { Player } from '../Player.js'; // Import Player class
 
 export class Wolf extends Enemy {
   constructor(game) {
@@ -101,15 +102,17 @@ export class Wolf extends Enemy {
     super.update(delta);
     
     // Wolf specific behavior - prowl before attacking
-    const distanceToPlayer = this.mesh.position.distanceTo(this.game.player.mesh.position);
-    
-    if (distanceToPlayer < this.detectionRange && !this.isProwling && Math.random() < 0.01) {
-      this.startProwling();
-    }
-    
-    // Animate tail
-    if (this.tail && Math.random() < 0.05) {
-      this.wag();
+    if (!this.isDead && !this.isAttacking && this.game.player && !this.game.player.isDead) {
+        const distanceToPlayer = this.mesh.position.distanceTo(this.game.player.mesh.position);
+
+        if (distanceToPlayer < this.detectionRange && !this.isProwling && Math.random() < 0.01) {
+            this.startProwling();
+        }
+
+        // Animate tail
+        if (this.tail && Math.random() < 0.05) {
+            this.wag();
+        }
     }
   }
   
@@ -120,7 +123,7 @@ export class Wolf extends Enemy {
     // Circle around player for a few seconds
     const duration = 2000 + Math.random() * 2000;
     const startTime = Date.now();
-    const center = this.game.player.mesh.position.clone();
+    let center = this.game.player ? this.game.player.mesh.position.clone() : this.mesh.position.clone();
     const startAngle = Math.random() * Math.PI * 2;
     const radius = 5 + Math.random() * 3;
     
@@ -128,7 +131,17 @@ export class Wolf extends Enemy {
       const now = Date.now();
       const elapsed = now - startTime;
       
-      if (elapsed < duration && !this.isDead) {
+      if (this.isDead) return; // Stop prowling if dead
+      if (this.game.player && this.game.player.isDead) {
+          this.targetPosition = null; // Stop if player is dead
+          this.isProwling = false;
+          return;
+      }
+      
+      if (elapsed < duration) {
+        // Update center if player moves
+        if (this.game.player) center = this.game.player.mesh.position.clone();
+        
         // Calculate position on circle around player
         const angle = startAngle + (elapsed / duration) * Math.PI * 2;
         const x = center.x + Math.cos(angle) * radius;
@@ -140,11 +153,11 @@ export class Wolf extends Enemy {
         this.mesh.lookAt(center);
         
         requestAnimationFrame(prowl);
-      } else if (!this.isDead) {
+      } else {
         // Done prowling, lunge at player
         this.isProwling = false;
         this.moveSpeed *= 2; // Restore speed and add bonus
-        this.targetPosition = this.game.player.mesh.position.clone();
+        if (this.game.player) this.targetPosition = this.game.player.mesh.position.clone();
         
         // Make attack sound
         console.log('*Wolf howl*');
@@ -185,5 +198,104 @@ export class Wolf extends Enemy {
   makeSound() {
     // Wolf growling sound
     console.log('*Wolf growl*');
+  }
+  
+  // Override takeDamage to store the source
+  takeDamage(amount, source) {
+    if (this.isDead) return;
+
+    this.health = Math.max(0, this.health - amount);
+    this.lastDamageSource = source;
+    
+    // --- Add Flash Effect ---
+    this.playDamageEffect();
+    // ----------------------
+    
+    if (this.health <= 0) {
+      this.die();
+    }
+  }
+
+  playDamageEffect() {
+    if (!this.mesh) return;
+
+    const originalMaterials = new Map();
+    this.mesh.traverse((child) => {
+      if (child.isMesh && child.material) {
+        originalMaterials.set(child.uuid, child.material.clone());
+         if (!child.material.emissive) {
+           child.material.emissive = new THREE.Color(0x000000);
+        }
+        child.material.emissive.setHex(0xff0000); // Flash red
+        child.material.needsUpdate = true;
+      }
+    });
+
+    setTimeout(() => {
+       if (!this.mesh) return; // Check if mesh still exists
+      this.mesh.traverse((child) => {
+        if (child.isMesh && originalMaterials.has(child.uuid)) {
+          // Restore original material properties
+           const originalMat = originalMaterials.get(child.uuid);
+           child.material.emissive.setHex(originalMat.emissive ? originalMat.emissive.getHex() : 0x000000);
+           child.material.needsUpdate = true;
+        }
+      });
+    }, 100); // Duration of the flash
+  }
+
+  die() {
+    if (this.isDead) return;
+    this.isDead = true;
+    console.log('Wolf died');
+
+    // If killed by player, trigger kill effect
+    if (this.lastDamageSource instanceof Player) {
+      this.game.player.onEnemyKilled(this);
+    }
+
+    // Play death animation
+    this.playDeathAnimation(); // Generic death animation for now
+    
+    // Remove from game world after delay
+    setTimeout(() => {
+      this.removeFromScene();
+    }, 1000); 
+  }
+  
+  playDeathAnimation() {
+    // Simple fade-out death animation for Wolf
+    const duration = 1000; 
+    const startTime = Date.now();
+    const originalOpacity = this.mesh.material ? this.mesh.material.opacity : 1;
+    this.mesh.traverse(child => {
+        if (child.material) {
+            child.material.transparent = true;
+        }
+    });
+
+    const animate = () => {
+        const now = Date.now();
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+
+        if (this.mesh && this.isDead) {
+            this.mesh.traverse(child => {
+                if (child.material) {
+                    child.material.opacity = originalOpacity * (1 - progress);
+                }
+            });
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            }
+        }
+    };
+    animate();
+  }
+  
+  removeFromScene() {
+    if (this.mesh && this.mesh.parent) {
+      this.mesh.parent.remove(this.mesh);
+    }
   }
 } 

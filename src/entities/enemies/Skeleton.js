@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
 import { Enemy } from './Enemy.js';
+import { Player } from '../Player.js'; // Import Player class
 
 export class Skeleton extends Enemy {
   constructor(game) {
@@ -111,6 +112,70 @@ export class Skeleton extends Enemy {
     }, 200);
   }
   
+  takeDamage(amount, source) {
+    if (this.isDead) return;
+
+    this.health = Math.max(0, this.health - amount);
+    this.lastDamageSource = source; // Store the source of the damage
+    
+    // --- Add Flash Effect ---
+    this.playDamageEffect();
+    // ----------------------
+    
+    if (this.health <= 0) {
+      this.die();
+    }
+  }
+  
+  playDamageEffect() {
+    if (!this.mesh) return;
+
+    const originalMaterials = new Map();
+    this.mesh.traverse((child) => {
+      if (child.isMesh && child.material) {
+        originalMaterials.set(child.uuid, child.material.clone());
+        if (!child.material.emissive) {
+           child.material.emissive = new THREE.Color(0x000000);
+        }
+        child.material.emissive.setHex(0xff0000); // Flash red
+        child.material.needsUpdate = true;
+      }
+    });
+
+    setTimeout(() => {
+      if (!this.mesh) return; // Check if mesh still exists
+      this.mesh.traverse((child) => {
+        if (child.isMesh && originalMaterials.has(child.uuid)) {
+          // Restore original material properties, keeping the instance if possible
+          const originalMat = originalMaterials.get(child.uuid);
+          child.material.emissive.setHex(originalMat.emissive ? originalMat.emissive.getHex() : 0x000000);
+          child.material.needsUpdate = true;
+           // If other properties were changed, restore them here too
+           // child.material.color.copy(originalMat.color);
+        }
+      });
+    }, 100); // Duration of the flash
+  }
+  
+  die() {
+    if (this.isDead) return; // Already dead
+    this.isDead = true;
+    console.log('Skeleton died');
+
+    // If the last damage source was the player, trigger the kill effect
+    if (this.lastDamageSource instanceof Player) {
+      this.game.player.onEnemyKilled(this);
+    }
+
+    // Play death effects
+    this.playDeathAnimation();
+    
+    // Remove from game world after animation (delay)
+    setTimeout(() => {
+      this.removeFromScene();
+    }, 1000); 
+  }
+  
   playDeathAnimation() {
     if (!this.mesh) return;
     
@@ -123,16 +188,16 @@ export class Skeleton extends Enemy {
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / duration);
       
-      if (this.mesh && !this.isDead) {
+      if (this.mesh && this.isDead) { // Check if actually dead for animation
         // Make skeleton parts fall apart
         this.mesh.children.forEach(part => {
-          part.position.y -= 0.05;
-          part.rotation.z += (Math.random() - 0.5) * 0.2;
-          part.rotation.x += (Math.random() - 0.5) * 0.2;
+          part.position.y -= 0.05 * (1 - progress); // Slow down fall towards end
+          part.rotation.z += (Math.random() - 0.5) * 0.2 * (1 - progress);
+          part.rotation.x += (Math.random() - 0.5) * 0.2 * (1 - progress);
         });
         
         // Rotate body
-        this.mesh.rotation.z += 0.05;
+        this.mesh.rotation.z += 0.05 * (1 - progress);
         
         if (progress < 1) {
           requestAnimationFrame(animate);
@@ -141,13 +206,18 @@ export class Skeleton extends Enemy {
     };
     
     animate();
-    
-    // Call the parent method for cleanup
-    super.playDeathAnimation();
   }
   
   makeSound() {
     // Skeleton bone rattling sound (would be audio in a real game)
     console.log('*Bone rattling*');
+  }
+  
+  removeFromScene() {
+    if (this.mesh && this.mesh.parent) {
+      this.mesh.parent.remove(this.mesh);
+    }
+    // Optionally notify enemy manager
+    // this.game.enemyManager.removeEnemy(this);
   }
 } 

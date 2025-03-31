@@ -9,16 +9,27 @@ export class Player extends Entity {
   constructor(game) {
     super(game);
     
-    // Player attributes
-    this.maxHealth = 100;
+    // Player base attributes
+    this.baseMaxHealth = 100;
+    this.baseMaxMana = 100;
+    this.baseManaRegen = 5;
+    this.baseAttackSpeed = 1.0;
+    this.baseAttackDamage = 10;
+    this.baseAttackRange = 1.5;
+    this.baseMoveSpeed = 5;
+    
+    // Current stats (initialized from base)
+    this.maxHealth = this.baseMaxHealth;
     this.health = this.maxHealth;
-    this.maxMana = 100;
+    this.maxMana = this.baseMaxMana;
     this.mana = this.maxMana;
-    this.manaRegen = 5; // Per second
-    this.attackSpeed = 1.0;
-    this.attackDamage = 10;
-    this.attackRange = 1.5;
-    this.moveSpeed = 5;
+    this.manaRegen = this.baseManaRegen;
+    this.attackSpeed = this.baseAttackSpeed;
+    this.attackDamage = this.baseAttackDamage;
+    this.attackRange = this.baseAttackRange;
+    this.moveSpeed = this.baseMoveSpeed;
+    
+    // Inventory and Equipment
     this.inventory = [];
     this.equipment = {
       weapon: null
@@ -30,6 +41,13 @@ export class Player extends Entity {
     // Movement
     this.targetPosition = null;
     this.isMoving = false;
+    
+    // Kill-based power scaling
+    this.killCount = 0;
+    this.sizeMultiplier = 1.0;
+    this.speedMultiplier = 1.0;
+    this.damageMultiplier = 1.0;
+    this.appliedBuffs = []; // To store descriptions of random buffs
     
     // Create player mesh
     this.createMesh();
@@ -51,23 +69,32 @@ export class Player extends Entity {
     this.weaponContainer = new THREE.Object3D();
     this.weaponContainer.position.set(0.3, 0.5, 0);
     this.mesh.add(this.weaponContainer);
+    
+    // Apply initial scale based on sizeMultiplier
+    this.applyScale();
+  }
+  
+  applyScale() {
+    if (this.mesh) {
+      this.mesh.scale.set(this.sizeMultiplier, this.sizeMultiplier, this.sizeMultiplier);
+      // Adjust weapon container position based on scale if needed
+      // this.weaponContainer.position.set(0.3 * this.sizeMultiplier, 0.5 * this.sizeMultiplier, 0);
+    }
   }
   
   update(delta) {
     // Skip update if dead
     if (this.isDead) return;
     
+    // Calculate effective move speed
+    const effectiveMoveSpeed = this.baseMoveSpeed * this.speedMultiplier;
+    
     // Handle keyboard movement
     const direction = this.game.inputHandler.getMovementDirection();
     if (direction.length() > 0) {
-      // Cancel any click-to-move action when using keyboard
       this.targetPosition = null;
-      
-      // Move character based on direction
-      const movement = direction.clone().multiplyScalar(delta * this.moveSpeed);
+      const movement = direction.clone().multiplyScalar(delta * effectiveMoveSpeed);
       this.mesh.position.add(movement);
-      
-      // Rotate character to face movement direction
       this.mesh.lookAt(this.mesh.position.clone().add(direction));
     }
     
@@ -75,23 +102,17 @@ export class Player extends Entity {
     if (this.targetPosition) {
       const direction = new THREE.Vector3();
       direction.subVectors(this.targetPosition, this.mesh.position);
-      direction.y = 0; // Keep movement on the xz plane
-      
+      direction.y = 0; 
       const distance = direction.length();
       
-      // If we're close enough to target, stop moving
       if (distance < 0.1) {
         this.targetPosition = null;
         this.isMoving = false;
       } else {
-        // Normalize and scale by move speed
         direction.normalize();
-        const movement = direction.clone().multiplyScalar(delta * this.moveSpeed);
+        const movement = direction.clone().multiplyScalar(delta * effectiveMoveSpeed);
         this.mesh.position.add(movement);
-        
-        // Rotate character to face movement direction
         this.mesh.lookAt(this.mesh.position.clone().add(direction));
-        
         this.isMoving = true;
       }
     }
@@ -107,52 +128,47 @@ export class Player extends Entity {
   }
   
   attack(target) {
-    // Can't attack if dead
     if (this.isDead) return;
     
+    // Calculate effective attack speed
+    const effectiveAttackSpeed = this.baseAttackSpeed * this.speedMultiplier;
     const now = Date.now();
-    const weaponCooldown = 1000 / this.attackSpeed;
+    const weaponCooldown = 1000 / effectiveAttackSpeed;
     
-    // Check if attack is off cooldown
     if (now - this.lastAttackTime < weaponCooldown) {
       return;
     }
     
-    // Calculate distance to target
     const distance = this.mesh.position.distanceTo(target.mesh.position);
-    
-    // Check if target is in range
     if (distance > this.attackRange) {
-      // Move towards target if out of range
       this.moveToPoint(target.mesh.position);
       return;
     }
     
-    // Face the target
     this.mesh.lookAt(target.mesh.position);
     
-    // Calculate damage
-    let damage = this.attackDamage;
+    // Calculate base damage
+    let damage = this.baseAttackDamage;
     if (this.equipment.weapon) {
-      damage += this.equipment.weapon.damage;
-      
+      damage += this.equipment.weapon.damage || 0;
       // Apply weapon attributes
       if (this.equipment.weapon.attributes) {
         this.equipment.weapon.attributes.forEach(attr => {
           if (attr.type === 'damage_multiplier') {
             damage *= attr.value;
           }
+          // Add other weapon attribute effects here if needed
         });
       }
     }
     
-    // Apply damage
-    target.takeDamage(damage);
+    // Apply player's damage multiplier
+    const effectiveDamage = damage * this.damageMultiplier;
     
-    // Update attack cooldown
+    // Apply damage, passing player as the source
+    target.takeDamage(effectiveDamage, this); 
+    
     this.lastAttackTime = now;
-    
-    // Play attack animation
     this.playAttackAnimation();
   }
   
@@ -160,22 +176,21 @@ export class Player extends Entity {
     // Simple attack animation by scaling the weapon
     if (this.equipment.weapon && this.equipment.weapon.mesh) {
       const weaponMesh = this.equipment.weapon.mesh;
+      const originalScale = weaponMesh.scale.clone();
+      const scaleUp = new THREE.Vector3(1.5, 1.5, 1.5);
       
       // Scale up quickly
-      const scaleUp = new THREE.Vector3(1.5, 1.5, 1.5);
-      weaponMesh.scale.copy(scaleUp);
+      weaponMesh.scale.multiply(scaleUp);
       
       // Scale back to normal after a short delay
       setTimeout(() => {
-        weaponMesh.scale.set(1, 1, 1);
+        weaponMesh.scale.copy(originalScale);
       }, 150);
     }
   }
   
   takeDamage(amount) {
     this.health = Math.max(0, this.health - amount);
-    
-    // Check for death
     if (this.health <= 0) {
       this.die();
     }
@@ -183,17 +198,11 @@ export class Player extends Entity {
   
   die() {
     console.log('Player died');
-    
-    // Set isDead flag
     this.isDead = true;
-    
-    // Change appearance to indicate death
     if (this.mesh && this.mesh.material) {
-      this.mesh.material.color.set(0x777777); // Gray color to indicate death
-      this.mesh.rotation.x = Math.PI / 2; // Rotate to lay flat (face up)
+      this.mesh.material.color.set(0x777777); 
+      this.mesh.rotation.x = Math.PI / 2; 
     }
-    
-    // Create death UI
     this.createDeathUI();
   }
   
@@ -244,25 +253,22 @@ export class Player extends Entity {
   }
   
   respawn() {
-    // Reset health and mana
+    // Reset stats but keep accumulated buffs/kills
     this.health = this.maxHealth;
     this.mana = this.maxMana;
     
-    // Reset appearance
     if (this.mesh && this.mesh.material) {
-      this.mesh.material.color.set(0x3333ff); // Original color
-      this.mesh.rotation.x = 0; // Reset rotation
+      this.mesh.material.color.set(0x3333ff);
+      this.mesh.rotation.x = 0; 
     }
     
-    // Reset position to spawn point (0, 0, 0 or other designated spawn point)
-    this.mesh.position.set(0, 0.5, 0);
-    
-    // Clear target position to stop movement
+    this.mesh.position.set(0, 0.5 * this.sizeMultiplier, 0); // Adjust spawn height based on size
     this.targetPosition = null;
     this.isMoving = false;
-    
-    // Reset isDead flag
     this.isDead = false;
+    
+    // Re-apply scale on respawn
+    this.applyScale();
   }
   
   addToInventory(item) {
@@ -387,5 +393,84 @@ export class Player extends Entity {
     } catch (error) {
       console.warn('Error adding attributes to weapon:', error.message);
     }
+  }
+  
+  // --- Power Scaling Mechanic ---
+  onEnemyKilled(enemy) {
+    this.killCount++;
+    console.log(`%cKill count: ${this.killCount}`, 'color: yellow; font-weight: bold;');
+
+    // --- Apply Guaranteed Buffs per Kill --- 
+    const sizeIncrease = 0.05; // Increased size buff
+    this.sizeMultiplier += sizeIncrease;
+    this.applyScale();
+    console.log(` Size Multiplier: ${this.sizeMultiplier.toFixed(2)} (+${sizeIncrease})`);
+    
+    const speedIncrease = 0.03; // Increased speed buff
+    this.speedMultiplier += speedIncrease;
+    this.attackSpeed = this.baseAttackSpeed * this.speedMultiplier; 
+    this.moveSpeed = this.baseMoveSpeed * this.speedMultiplier;
+    console.log(` Speed Multiplier: ${this.speedMultiplier.toFixed(2)} (+${speedIncrease}) -> Move: ${this.moveSpeed.toFixed(2)}, Attack: ${this.attackSpeed.toFixed(2)}`);
+
+    const damageIncrease = 0.08; // Increased damage buff
+    this.damageMultiplier += damageIncrease;
+    console.log(` Damage Multiplier: ${this.damageMultiplier.toFixed(2)} (+${damageIncrease})`);
+    
+    // --- Apply Random Powerful Buff Every 3 Kills (more frequent) ---
+    if (this.killCount > 0 && this.killCount % 3 === 0) {
+      console.log(`%cApplying powerful buff at ${this.killCount} kills...`, 'color: cyan');
+      this.applyRandomPowerfulBuff();
+    } else {
+      console.log(` Next powerful buff at ${Math.ceil(this.killCount / 3) * 3} kills`);
+    }
+    
+    // Heal the player more significantly
+    const healAmount = 15;
+    this.health = Math.min(this.maxHealth, this.health + healAmount);
+    console.log(` Healed for ${healAmount}. Current Health: ${Math.round(this.health)}/${this.maxHealth}`);
+    
+    // Update UI immediately to show heal/stat changes
+    if (this.game.ui) {
+      this.game.ui.update(); 
+    }
+  }
+
+  applyRandomPowerfulBuff() {
+    const buffs = [
+      { type: 'health_increase', value: 35, description: '+35 Max Health' }, // Buffed
+      { type: 'mana_increase', value: 25, description: '+25 Max Mana' },   // Buffed
+      { type: 'damage_boost', value: 0.2, description: '+20% Damage Multiplier' }, // Buffed
+      { type: 'speed_boost', value: 0.1, description: '+10% Speed Multiplier' },  // Buffed
+      // { type: 'crit_chance', value: 0.05, description: '+5% Crit Chance (Not Implemented)' },
+      // { type: 'lifesteal', value: 0.02, description: '+2% Lifesteal (Not Implemented)' }
+    ];
+
+    const randomBuff = buffs[Math.floor(Math.random() * buffs.length)];
+    this.appliedBuffs.push(randomBuff.description);
+    console.log(`%c-> Applied Buff: ${randomBuff.description}`, 'color: lightgreen; font-weight: bold;');
+
+    switch (randomBuff.type) {
+      case 'health_increase':
+        this.maxHealth += randomBuff.value;
+        this.health += randomBuff.value; 
+        console.log(`   New Max Health: ${this.maxHealth}`);
+        break;
+      case 'mana_increase':
+        this.maxMana += randomBuff.value;
+        this.mana += randomBuff.value;
+        console.log(`   New Max Mana: ${this.maxMana}`);
+        break;
+      case 'damage_boost':
+        this.damageMultiplier += randomBuff.value;
+        console.log(`   New Damage Multiplier: ${this.damageMultiplier.toFixed(2)}`);
+        break;
+      case 'speed_boost':
+        this.speedMultiplier += randomBuff.value;
+        this.attackSpeed = this.baseAttackSpeed * this.speedMultiplier; 
+        this.moveSpeed = this.baseMoveSpeed * this.speedMultiplier;
+        console.log(`   New Speed Multiplier: ${this.speedMultiplier.toFixed(2)} -> Move: ${this.moveSpeed.toFixed(2)}, Attack: ${this.attackSpeed.toFixed(2)}`);
+        break;
+    }
+    // UI update is handled in onEnemyKilled after this call
   }
 } 

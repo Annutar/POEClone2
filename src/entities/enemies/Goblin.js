@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
 import { Enemy } from './Enemy.js';
+import { Player } from '../Player.js'; // Import Player class
 
 export class Goblin extends Enemy {
   constructor(game) {
@@ -117,15 +118,18 @@ export class Goblin extends Enemy {
   update(delta) {
     super.update(delta);
     
-    // Goblin specific behavior - call for help when injured
-    if (this.health < this.maxHealth * 0.5 && !this.hasCalled) {
-      this.callForHelp();
-    }
-    
-    // Randomly jump around when close to player
-    const distanceToPlayer = this.mesh.position.distanceTo(this.game.player.mesh.position);
-    if (distanceToPlayer < 5 && Math.random() < 0.02) {
-      this.dodge();
+    // Goblin specific behavior
+    if (!this.isDead && this.game.player && !this.game.player.isDead) {
+        // Call for help when injured
+        if (this.health < this.maxHealth * 0.5 && !this.hasCalled) {
+          this.callForHelp();
+        }
+        
+        // Randomly jump around when close to player
+        const distanceToPlayer = this.mesh.position.distanceTo(this.game.player.mesh.position);
+        if (distanceToPlayer < 5 && Math.random() < 0.02) {
+          this.dodge();
+        }
     }
   }
   
@@ -143,20 +147,24 @@ export class Goblin extends Enemy {
     
     // Make them aggressive and target the player
     nearbyEnemies.forEach(goblin => {
-      goblin.isAggressive = true;
-      goblin.targetPosition = this.game.player.mesh.position.clone();
-      goblin.friends.push(this);
-      this.friends.push(goblin);
+      if (goblin && !goblin.isAggressive && this.game.player) {
+        goblin.isAggressive = true;
+        goblin.targetPosition = this.game.player.mesh.position.clone();
+        if (!goblin.friends.includes(this)) goblin.friends.push(this);
+        if (!this.friends.includes(goblin)) this.friends.push(goblin);
+      }
     });
     
     // Spawn additional goblins if not many responded
     if (nearbyEnemies.length < 2) {
       for (let i = 0; i < 2 - nearbyEnemies.length; i++) {
         const newGoblin = this.game.enemyManager.spawnEnemyNearPosition(this.mesh.position, Goblin);
-        newGoblin.isAggressive = true;
-        newGoblin.targetPosition = this.game.player.mesh.position.clone();
-        newGoblin.friends.push(this);
-        this.friends.push(newGoblin);
+        if (newGoblin && this.game.player) {
+            newGoblin.isAggressive = true;
+            newGoblin.targetPosition = this.game.player.mesh.position.clone();
+            if (!newGoblin.friends.includes(this)) newGoblin.friends.push(this);
+            if (!this.friends.includes(newGoblin)) this.friends.push(newGoblin);
+        }
       }
     }
   }
@@ -220,31 +228,121 @@ export class Goblin extends Enemy {
     }, 100);
   }
   
-  takeDamage(amount) {
-    super.takeDamage(amount);
+  // Override takeDamage to store the source and handle dodge
+  takeDamage(amount, source) {
+    if (this.isDead) return;
+
+    this.health = Math.max(0, this.health - amount);
+    this.lastDamageSource = source;
     
-    // Goblins sometimes dodge after being hit
-    if (!this.isDead && Math.random() < 0.3) {
+    // --- Add Flash Effect ---
+    this.playDamageEffect();
+    // ----------------------
+    
+    if (this.health <= 0) {
+      this.die();
+    } else if (Math.random() < 0.3) { // Dodge on hit chance (keep this)
       this.dodge();
     }
   }
   
+  playDamageEffect() {
+    if (!this.mesh) return;
+
+    const originalMaterials = new Map();
+    this.mesh.traverse((child) => {
+      if (child.isMesh && child.material) {
+        originalMaterials.set(child.uuid, child.material.clone());
+        if (!child.material.emissive) {
+           child.material.emissive = new THREE.Color(0x000000);
+        }
+        child.material.emissive.setHex(0xff0000); // Flash red
+        child.material.needsUpdate = true;
+      }
+    });
+
+    setTimeout(() => {
+       if (!this.mesh) return; // Check if mesh still exists
+      this.mesh.traverse((child) => {
+        if (child.isMesh && originalMaterials.has(child.uuid)) {
+          // Restore original material properties
+           const originalMat = originalMaterials.get(child.uuid);
+           child.material.emissive.setHex(originalMat.emissive ? originalMat.emissive.getHex() : 0x000000);
+           child.material.needsUpdate = true;
+        }
+      });
+    }, 100); // Duration of the flash
+  }
+  
   die() {
-    super.die();
+    if (this.isDead) return;
+    this.isDead = true;
+    console.log('Goblin died');
+
+    // If killed by player, trigger kill effect
+    if (this.lastDamageSource instanceof Player) {
+        this.game.player.onEnemyKilled(this);
+    }
     
     // Tell friends this goblin died
     this.friends.forEach(friend => {
-      if (!friend.isDead) {
+      if (friend && !friend.isDead) {
+        // Remove self from friend's list
+        const index = friend.friends.indexOf(this);
+        if (index > -1) {
+            friend.friends.splice(index, 1);
+        }
         // 50% chance to flee when friend dies
         if (Math.random() < 0.5) {
           friend.flee();
         }
       }
     });
+    this.friends = []; // Clear own friend list
+
+    // Play death animation
+    this.playDeathAnimation(); // Generic death for now
+    
+    // Remove from game world after delay
+    setTimeout(() => {
+      this.removeFromScene();
+    }, 1000); 
+  }
+  
+  playDeathAnimation() {
+    // Simple fade-out death animation for Goblin
+    const duration = 1000; 
+    const startTime = Date.now();
+    this.mesh.traverse(child => {
+        if (child.material) {
+            child.material.transparent = true;
+        }
+    });
+
+    const animate = () => {
+        const now = Date.now();
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        const originalOpacity = 1; // Assume starting opacity is 1
+
+        if (this.mesh && this.isDead) {
+            this.mesh.traverse(child => {
+                if (child.material) {
+                    child.material.opacity = originalOpacity * (1 - progress);
+                }
+            });
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            }
+        }
+    };
+    animate();
   }
   
   flee() {
     // Run away from player
+    if (!this.game.player) return; // Can't flee if player doesn't exist
+    
     const fleeDir = new THREE.Vector3()
       .subVectors(this.mesh.position, this.game.player.mesh.position)
       .normalize()
@@ -266,5 +364,11 @@ export class Goblin extends Enemy {
   makeSound() {
     // Goblin cackle/screech
     console.log('*Goblin screech*');
+  }
+  
+  removeFromScene() {
+    if (this.mesh && this.mesh.parent) {
+      this.mesh.parent.remove(this.mesh);
+    }
   }
 } 
