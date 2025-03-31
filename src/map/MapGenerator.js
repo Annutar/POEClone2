@@ -11,7 +11,6 @@ export class MapGenerator {
     
     // Map features
     this.riverWidth = 3;
-    this.bridgeCount = 3;
     this.treeCount = 100;
     this.bushCount = 80;
     this.rockCount = 50;
@@ -40,9 +39,6 @@ export class MapGenerator {
     
     // Generate rivers
     this.generateRivers();
-    
-    // Generate bridges
-    this.generateBridges();
     
     // Generate trees, bushes, and rocks
     this.generateVegetation();
@@ -150,13 +146,6 @@ export class MapGenerator {
     
     // Create animated water surface
     this.animateWater();
-    
-    // Now safely add river edges
-    try {
-      this.generateRiverEdges();
-    } catch (error) {
-      console.warn("Warning: Could not generate river edges:", error.message);
-    }
   }
   
   generateRiverPath() {
@@ -235,199 +224,18 @@ export class MapGenerator {
     }
   }
   
-  generateBridges() {
-    // Find good locations for bridges across the river
-    const bridgeLocations = this.findBridgeLocations();
-    
-    // Create bridges
-    for (const location of bridgeLocations) {
-      this.createBridge(location);
-    }
-  }
-  
-  findBridgeLocations() {
-    // Find suitable locations for bridges across rivers
-    const locations = [];
-    
-    // Find water regions that cross a river
-    for (let x = 0; x < this.mapSize; x++) {
-      for (let z = 0; z < this.mapSize; z++) {
-        if (this.mapData[x][z].type === 'water') {
-          // Check if this is a good bridge location (narrow part, not already near a bridge)
-          if (this.isGoodBridgeLocation(x, z)) {
-            locations.push({ x, z, direction: this.getRiverDirection(x, z) });
-            
-            // Prevent bridges too close to each other
-            x += 10;
-            break;
-          }
-        }
-      }
-    }
-    
-    // Limit to the number of bridges we want
-    return locations.slice(0, this.bridgeCount);
-  }
-  
-  isGoodBridgeLocation(x, z) {
-    // Check if this is a suitable bridge location
-    
-    // Don't place bridge near map edge
-    const borderSize = 10;
-    if (x < borderSize || x >= this.mapSize - borderSize || 
-        z < borderSize || z >= this.mapSize - borderSize) {
-      return false;
-    }
-    
-    // Try to find narrow river parts
-    const riverWidth = this.getRiverWidth(x, z);
-    if (riverWidth > this.riverWidth * 1.5) {
-      return false;
-    }
-    
-    return true;
-  }
-  
-  getRiverWidth(x, z) {
-    // Determine river width at this point
-    let width = 0;
-    
-    // Check in both directions
-    for (let dx = -this.riverWidth * 2; dx <= this.riverWidth * 2; dx++) {
-      const tx = x + dx;
-      if (tx >= 0 && tx < this.mapSize && this.mapData[tx][z].type === 'water') {
-        width++;
-      }
-    }
-    
-    return width;
-  }
-  
-  getRiverDirection(x, z) {
-    // Determine river direction at this point (for bridge orientation)
-    
-    // Check horizontal river
-    let horizontalCount = 0;
-    for (let dx = -2; dx <= 2; dx++) {
-      const tx = x + dx;
-      if (tx >= 0 && tx < this.mapSize && this.mapData[tx][z].type === 'water') {
-        horizontalCount++;
-      }
-    }
-    
-    // Check vertical river
-    let verticalCount = 0;
-    for (let dz = -2; dz <= 2; dz++) {
-      const tz = z + dz;
-      if (tz >= 0 && tz < this.mapSize && this.mapData[x][tz].type === 'water') {
-        verticalCount++;
-      }
-    }
-    
-    // Return orientation based on which direction has more water tiles
-    return horizontalCount > verticalCount ? 'horizontal' : 'vertical';
-  }
-  
-  createBridge(location) {
-    // Create a wooden bridge across the river
-    const bridgeWidth = 2;
-    const bridgeLength = this.riverWidth * 1.5;
-    
-    // Create bridge geometry
-    const bridgeGeometry = new THREE.BoxGeometry(
-      location.direction === 'horizontal' ? bridgeLength : bridgeWidth,
-      0.1,
-      location.direction === 'horizontal' ? bridgeWidth : bridgeLength
-    );
-    
-    const bridgeMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8b4513, // Brown wood
-      roughness: 0.9,
-      metalness: 0.1
-    });
-    
-    const bridge = new THREE.Mesh(bridgeGeometry, bridgeMaterial);
-    
-    // Position bridge
-    bridge.position.set(
-      (location.x - this.mapSize / 2) * this.tileSize, 
-      0.3, // Slightly above water level
-      (location.z - this.mapSize / 2) * this.tileSize
-    );
-    
-    // Add railings
-    const railingHeight = 0.3;
-    const railingThickness = 0.05;
-    
-    for (let side = -1; side <= 1; side += 2) {
-      // Skip middle
-      if (side === 0) continue;
-      
-      const railingGeometry = new THREE.BoxGeometry(
-        location.direction === 'horizontal' ? bridgeLength : railingThickness,
-        railingHeight,
-        location.direction === 'horizontal' ? railingThickness : bridgeLength
-      );
-      
-      const railing = new THREE.Mesh(railingGeometry, bridgeMaterial);
-      
-      railing.position.set(
-        0,
-        railingHeight / 2,
-        side * (bridgeWidth / 2 - railingThickness / 2) * (location.direction === 'horizontal' ? 1 : 0)
-      );
-      
-      if (location.direction === 'vertical') {
-        railing.position.set(
-          side * (bridgeWidth / 2 - railingThickness / 2),
-          railingHeight / 2,
-          0
-        );
-      }
-      
-      bridge.add(railing);
-    }
-    
-    // Add to scene
-    this.mapContainer.add(bridge);
-    this.objectMeshes.push(bridge);
-    
-    // Mark tiles as bridge in map data
-    const length = Math.ceil(bridgeLength / this.tileSize);
-    const width = Math.ceil(bridgeWidth / this.tileSize);
-    
-    for (let dx = -length / 2; dx < length / 2; dx++) {
-      for (let dz = -width / 2; dz < width / 2; dz++) {
-        let gridX, gridZ;
-        if (location.direction === 'horizontal') {
-            gridX = Math.floor(location.x + dx);
-            gridZ = Math.floor(location.z + dz);
-        } else { // vertical
-            gridX = Math.floor(location.x + dz);
-            gridZ = Math.floor(location.z + dx);
-        }
-        const tx = gridX;
-        const tz = gridZ;
-        
-        if (tx >= 0 && tx < this.mapSize && tz >= 0 && tz < this.mapSize) {
-          // Ensure the row and cell exist before trying to set property
-          if (this.mapData[tx] && this.mapData[tx][tz]) { 
-            this.mapData[tx][tz].object = 'bridge';
-          } else {
-            console.warn(`Attempted to access invalid map data at [${tx}, ${tz}] when creating bridge.`);
-          }
-        }
-      }
-    }
-  }
-  
   generateVegetation() {
-    // Add trees, bushes, and rocks to the map
-    
-    // Create instances for optimization
+    // Create regular trees, bushes, and rocks
     this.createTrees();
     this.createBushes();
     this.createRocks();
+
+    // Create new environmental features
+    this.createGnarledTreeMap();
+    this.createOvergrownRoots();
+    this.generateMurkyPonds();
+    this.createFallenLogs();
+    this.createDenseThickets();
   }
   
   createTrees() {
@@ -715,76 +523,93 @@ export class MapGenerator {
   }
   
   placeVegetation(objectMesh, objectType, clearRadius) {
-    // Try to find a suitable position for vegetation
-    for (let attempts = 0; attempts < 20; attempts++) {
-      // Random position on map
-      const x = Math.floor(Math.random() * this.mapSize);
-      const z = Math.floor(Math.random() * this.mapSize);
-      
-      // Check if the tile is suitable
-      if (this.mapData[x][z].type === 'ground' && !this.mapData[x][z].object) {
-        // Check for clearance (no water or other objects nearby)
-        if (this.checkClearance(x, z, clearRadius, objectType)) {
-          // Position mesh
-          objectMesh.position.set(
-            (x - this.mapSize / 2) * this.tileSize, 
-            0, 
-            (z - this.mapSize / 2) * this.tileSize
-          );
-          
-          // Add some random rotation
-          objectMesh.rotation.y = Math.random() * Math.PI * 2;
-          
-          // Add random scale variation
-          const scale = 0.8 + Math.random() * 0.4;
-          objectMesh.scale.set(scale, scale, scale);
-          
-          // Add to scene
-          this.mapContainer.add(objectMesh);
-          this.objectMeshes.push(objectMesh);
-          
-          // Mark in map data
-          this.mapData[x][z].object = objectType;
-          
-          return true;
+    let placed = false;
+    let attempts = 0;
+    const maxAttempts = 100;
+
+    while (!placed && attempts < maxAttempts) {
+        attempts++;
+        const worldX = (Math.random() * this.mapSize - this.mapSize / 2) * this.tileSize;
+        const worldZ = (Math.random() * this.mapSize - this.mapSize / 2) * this.tileSize;
+        const gridX = Math.floor((worldX / this.tileSize) + this.mapSize / 2);
+        const gridZ = Math.floor((worldZ / this.tileSize) + this.mapSize / 2);
+
+        // Check if the target tile is valid ground and NOT a thicket tile
+        if (gridX >= 0 && gridX < this.mapSize && gridZ >= 0 && gridZ < this.mapSize && 
+            this.mapData[gridX]?.[gridZ]?.type === 'ground' &&
+            this.mapData[gridX]?.[gridZ]?.object !== 'thicket_bush' && // Don't place general items inside thickets
+            !this.mapData[gridX]?.[gridZ]?.impassable) { // Check impassable flag
+            
+            if (this.checkClearance(gridX, gridZ, clearRadius, objectType)) {
+                // Set Y position based on object type
+                let posY = 0.1; // Default slight elevation
+                if(objectType === 'fallen_log') {
+                  posY = objectMesh.geometry.parameters.radiusTop * 0.8; 
+                } else if (objectType === 'gnarled_tree' || objectType === 'tree') {
+                    posY = 0; // Trees start at base y=0
+                } else if (objectType === 'bush' || objectType === 'berry_bush') {
+                    posY = 0.1; // Bushes slightly elevated
+                } else if (objectType === 'rock') {
+                    // Fix: Rocks are groups. Place them near ground level.
+                    posY = 0.1; // Simple small offset for rocks
+                }
+                objectMesh.position.set(worldX, posY, worldZ);
+
+                this.mapContainer.add(objectMesh);
+                this.objectMeshes.push(objectMesh);
+                this.mapData[gridX][gridZ].object = objectType;
+                placed = true;
+            }
         }
-      }
     }
-    
-    return false;
+
+    if (!placed) {
+        console.warn(`Could not place ${objectType} after ${maxAttempts} attempts.`);
+        if (objectMesh.geometry) objectMesh.geometry.dispose();
+        if (objectMesh.material) {
+           if (Array.isArray(objectMesh.material)) {
+                objectMesh.material.forEach(m => m.dispose());
+            } else if (objectMesh.material.dispose) {
+                objectMesh.material.dispose();
+            }
+        }
+    }
   }
   
   checkClearance(x, z, radius, objectType) {
-    // Check if there's enough clearance for this object
-    const radiusCeil = Math.ceil(radius);
-    
-    for (let dx = -radiusCeil; dx <= radiusCeil; dx++) {
-      for (let dz = -radiusCeil; dz <= radiusCeil; dz++) {
-        const distance = Math.sqrt(dx * dx + dz * dz);
-        
-        if (distance <= radius) {
-          const tx = x + dx;
-          const tz = z + dz;
-          
-          // Check map bounds
-          if (tx < 0 || tx >= this.mapSize || tz < 0 || tz >= this.mapSize) {
-            return false;
-          }
-          
-          // Check for water or other objects
-          if (this.mapData[tx][tz].type === 'water') {
-            return false;
-          }
-          
-          // Trees need more space, bushes can be closer to objects
-          if (objectType === 'tree' && this.mapData[tx][tz].object) {
-            return false;
-          }
+    const radiusSquared = radius * radius;
+    const iRadius = Math.ceil(radius);
+
+    for (let dx = -iRadius; dx <= iRadius; dx++) {
+        for (let dz = -iRadius; dz <= iRadius; dz++) {
+            if (dx * dx + dz * dz > radiusSquared) continue;
+            const checkX = x + dx;
+            const checkZ = z + dz;
+
+            if (checkX < 0 || checkX >= this.mapSize || checkZ < 0 || checkZ >= this.mapSize) return false; 
+            
+            const tile = this.mapData[checkX]?.[checkZ];
+            if (!tile) return false; 
+
+            // Check for impassable tiles (thickets) or non-ground tiles
+            if (tile.impassable || (tile.type !== 'ground' && tile.type !== 'bush')) { // Allow placing near bushes? Maybe not.
+                 if (tile.type === 'water' || tile.type === 'pond_water') return false; // Definitely not in water/ponds
+                 if (tile.object === 'thicket_bush') return false; // Don't place things overlapping thicket markers
+                 // Allow roots to be near trees, even if tile isn't strictly ground?
+                 if (objectType === 'root' && (tile.object === 'tree' || tile.object === 'gnarled_tree')) continue;
+                 // Otherwise, if not ground, it's blocked.
+                 if (tile.type !== 'ground') return false;
+            }
+
+            // Check for interfering objects (allow roots near trees)
+            if (tile.object !== null) {
+                 if (objectType === 'root' && (tile.object === 'tree' || tile.object === 'gnarled_tree')) continue;
+                 // If the tile object is not null and not a tree we are placing a root near, block.
+                 return false;
+            }
         }
-      }
     }
-    
-    return true;
+    return true; // Area is clear
   }
   
   generateFog() {
@@ -793,46 +618,338 @@ export class MapGenerator {
     this.game.scene.fog = new THREE.FogExp2(fogColor, 0.02);
   }
 
-  generateRiverEdges() {
-    // This is a more robust version that won't throw errors
-    console.log("Generating river edges");
-    
-    try {
-      // Iterate through map to find water tiles
-      for (let x = 1; x < this.mapSize - 1; x++) {
-        for (let z = 1; z < this.mapSize - 1; z++) {
-          if (this.mapData[x][z].type === 'water') {
-            // Check adjacent tiles
-            for (let dx = -1; dx <= 1; dx++) {
-              for (let dz = -1; dz <= 1; dz++) {
-                if (dx === 0 && dz === 0) continue; // Skip self
-                
-                const nx = x + dx;
-                const nz = z + dz;
-                
-                // Check if adjacent tile is ground
-                if (nx >= 0 && nx < this.mapSize && nz >= 0 && nz < this.mapSize && 
-                    this.mapData[nx][nz].type === 'ground') {
-                  // This is a river edge - no need to create edge objects
-                }
-              }
-            }
-          }
-        }
+  // ADDED Method: Gnarled Trees
+  createGnarledTreeMap() {
+    console.log("Creating gnarled trees");
+    const gnarledTreeCount = Math.floor(this.treeCount * 0.15); // Approx 15% gnarled trees
+    const gnarledTreeMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x5C3A21, // Darker, browner wood
+      roughness: 0.8, 
+      metalness: 0.1 
+    });
+    const gnarledLeafMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x2E4021, // Darker green
+      roughness: 0.9,
+      metalness: 0.0
+    });
+
+    for (let i = 0; i < gnarledTreeCount; i++) {
+      const trunkHeight = Math.random() * 3 + 4; // Taller, more imposing
+      const trunkRadius = Math.random() * 0.4 + 0.5; // Thicker trunk
+      
+      // More complex trunk geometry (using Cylinder with more segments for potential twisting later)
+      const trunkGeometry = new THREE.CylinderGeometry(trunkRadius * 0.8, trunkRadius, trunkHeight, 12, 3);
+      // Simple twist (can be improved)
+      for (let j = 0; j < trunkGeometry.attributes.position.count; j++) {
+          const y = trunkGeometry.attributes.position.getY(j);
+          const angle = (y / trunkHeight) * Math.PI * 0.5; // Twist more towards the top
+          const x = trunkGeometry.attributes.position.getX(j);
+          const z = trunkGeometry.attributes.position.getZ(j);
+          trunkGeometry.attributes.position.setX(j, x * Math.cos(angle) - z * Math.sin(angle));
+          trunkGeometry.attributes.position.setZ(j, x * Math.sin(angle) + z * Math.cos(angle));
       }
-    } catch (error) {
-      console.warn("Non-critical error in river edge generation:", error.message);
-      // Fall through and continue - this is not a critical feature
+      trunkGeometry.computeVertexNormals(); // Recalculate normals after twisting
+
+      const trunk = new THREE.Mesh(trunkGeometry, gnarledTreeMaterial);
+      trunk.castShadow = true;
+      trunk.receiveShadow = true;
+      
+      // Leaf geometry (larger, denser canopy)
+      const leafRadius = trunkRadius * 3 + Math.random() * 1.5;
+      const leafHeight = trunkHeight * 1.2 + Math.random();
+      const leafGeometry = new THREE.ConeGeometry(leafRadius, leafHeight, 8); // Cone for simplicity
+      const leaves = new THREE.Mesh(leafGeometry, gnarledLeafMaterial);
+      leaves.position.y = trunkHeight / 2 + leafHeight / 3; // Position canopy
+      leaves.castShadow = true;
+
+      const gnarledTree = new THREE.Group();
+      gnarledTree.add(trunk);
+      gnarledTree.add(leaves);
+      
+      gnarledTree.userData = { type: 'gnarled_tree' }; // Identify object type
+
+      // Place the gnarled tree on the map
+      this.placeVegetation(gnarledTree, 'gnarled_tree', 2.5); // Use a slightly larger clear radius
     }
   }
 
-  createRiverEdge(x, z, edgeType) {
-    // This is a simplified version that won't throw errors
-    // We won't actually create any objects here
-    try {
-      // Just a placeholder to mark where edges would be
-    } catch (error) {
-      console.warn("Non-critical error in river edge creation:", error.message);
+  // ADDED Method: Overgrown Roots
+  createOvergrownRoots() {
+    console.log("Creating overgrown roots");
+    const rootCount = Math.floor(this.treeCount * 0.5); // Roots near roughly half the trees
+    const rootMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x6B4F3A, // Earthy root color
+        roughness: 0.9,
+        metalness: 0.05 
+    });
+
+    const potentialRootLocations = [];
+    // Find locations near existing trees (both regular and gnarled)
+    this.mapContainer.children.forEach(child => {
+        if (child.userData && (child.userData.type === 'tree' || child.userData.type === 'gnarled_tree')) {
+            potentialRootLocations.push(child.position.clone());
+        }
+    });
+
+    for (let i = 0; i < rootCount; i++) {
+        if (potentialRootLocations.length === 0) break;
+
+        // Pick a random tree location
+        const randomIndex = Math.floor(Math.random() * potentialRootLocations.length);
+        const basePosition = potentialRootLocations[randomIndex];
+        potentialRootLocations.splice(randomIndex, 1); // Remove to avoid placing multiple roots at the exact same tree
+
+        const numRootsPerCluster = Math.floor(Math.random() * 4) + 2; // 2-5 roots per cluster
+
+        for (let j = 0; j < numRootsPerCluster; j++) {
+            const rootLength = Math.random() * 2 + 1; // Length of the root segment
+            const rootRadius = Math.random() * 0.1 + 0.05; // Thickness
+
+            // Using TubeGeometry for potentially smoother curves
+            const curve = new THREE.LineCurve3(
+                new THREE.Vector3(0, 0.1, 0), // Start slightly above ground
+                new THREE.Vector3(
+                    (Math.random() - 0.5) * rootLength * 2, 
+                    Math.random() * 0.2 + 0.05, // Slight vertical variation
+                    (Math.random() - 0.5) * rootLength * 2
+                ) // End point relative to start
+            );
+            
+            const rootGeometry = new THREE.TubeGeometry(curve, 8, rootRadius, 6, false);
+            const rootMesh = new THREE.Mesh(rootGeometry, rootMaterial);
+            rootMesh.castShadow = true;
+
+            // Position the root cluster near the tree base
+            rootMesh.position.copy(basePosition);
+            // Add slight random offset from base position
+            rootMesh.position.x += (Math.random() - 0.5) * 0.5; 
+            rootMesh.position.z += (Math.random() - 0.5) * 0.5;
+            // Random rotation for variety
+            rootMesh.rotation.y = Math.random() * Math.PI * 2;
+
+            rootMesh.userData = { type: 'root' }; // Identify object type
+            this.mapContainer.add(rootMesh);
+            this.objectMeshes.push(rootMesh); // Add to objects list for potential interactions
+            
+            // Mark map data (simplified: mark center of root cluster)
+            // A more complex approach would mark the tiles the tube geometry covers
+            const gridX = Math.floor((rootMesh.position.x / this.tileSize) + this.mapSize / 2);
+            const gridZ = Math.floor((rootMesh.position.z / this.tileSize) + this.mapSize / 2);
+            if (gridX >= 0 && gridX < this.mapSize && gridZ >= 0 && gridZ < this.mapSize) {
+                if (this.mapData[gridX][gridZ].object === null) { // Don't overwrite other objects
+                  this.mapData[gridX][gridZ].object = 'root';
+                }
+            }
+        }
     }
   }
+
+  // ADDED Method: Murky Ponds
+  generateMurkyPonds() {
+    console.log("Generating murky ponds");
+    const pondCount = 10; // Number of ponds
+    const maxPondRadius = 3.5; // Max radius in tiles
+    const minPondRadius = 1.5; // Min radius in tiles
+    const pondMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1A2F1A, // Dark, murky green/brown
+        transparent: true,
+        opacity: 0.85,
+        roughness: 0.2,
+        metalness: 0.1,
+        side: THREE.DoubleSide // Render both sides in case player camera goes below
+    });
+
+    for (let i = 0; i < pondCount; i++) {
+        let attempts = 0;
+        const maxAttempts = 50;
+        let placed = false;
+
+        while (attempts < maxAttempts && !placed) {
+            attempts++;
+            const pondRadiusTiles = Math.random() * (maxPondRadius - minPondRadius) + minPondRadius;
+            const pondRadiusWorld = pondRadiusTiles * this.tileSize;
+            
+            // Try random positions
+            const x = Math.floor(Math.random() * this.mapSize);
+            const z = Math.floor(Math.random() * this.mapSize);
+
+            // Check if the center point is suitable (ground, not too near edge)
+            if (this.mapData[x]?.[z]?.type === 'ground' && 
+                x > pondRadiusTiles && x < this.mapSize - pondRadiusTiles &&
+                z > pondRadiusTiles && z < this.mapSize - pondRadiusTiles) {
+
+                // Check clearance in the area
+                let clear = true;
+                for (let dx = -Math.ceil(pondRadiusTiles); dx <= Math.ceil(pondRadiusTiles); dx++) {
+                    for (let dz = -Math.ceil(pondRadiusTiles); dz <= Math.ceil(pondRadiusTiles); dz++) {
+                        const checkX = x + dx;
+                        const checkZ = z + dz;
+                        if (Math.sqrt(dx*dx + dz*dz) <= pondRadiusTiles) { // Check within circle
+                            if (this.mapData[checkX]?.[checkZ]?.type !== 'ground' || this.mapData[checkX]?.[checkZ]?.object !== null) {
+                                clear = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (!clear) break;
+                }
+
+                if (clear) {
+                    // Create pond geometry (simple circle)
+                    const pondGeometry = new THREE.CircleGeometry(pondRadiusWorld, 32);
+                    const pondMesh = new THREE.Mesh(pondGeometry, pondMaterial);
+                    
+                    // Position slightly below ground level to avoid z-fighting
+                    const worldX = (x - this.mapSize / 2) * this.tileSize;
+                    const worldZ = (z - this.mapSize / 2) * this.tileSize;
+                    pondMesh.position.set(worldX, -0.05, worldZ); 
+                    pondMesh.rotation.x = -Math.PI / 2; // Lay flat
+                    pondMesh.receiveShadow = true;
+
+                    this.mapContainer.add(pondMesh);
+                    this.waterMeshes.push(pondMesh); // Add to water meshes (though not animated like river)
+                    pondMesh.userData = { type: 'pond' };
+
+                    // Mark map data
+                    for (let dx = -Math.ceil(pondRadiusTiles); dx <= Math.ceil(pondRadiusTiles); dx++) {
+                        for (let dz = -Math.ceil(pondRadiusTiles); dz <= Math.ceil(pondRadiusTiles); dz++) {
+                            const markX = x + dx;
+                            const markZ = z + dz;
+                            if (Math.sqrt(dx*dx + dz*dz) <= pondRadiusTiles) {
+                                if (this.mapData[markX]?.[markZ]) {
+                                    this.mapData[markX][markZ].type = 'pond_water';
+                                    // Optionally mark the central tile as object 'pond'
+                                    if(dx === 0 && dz === 0) this.mapData[markX][markZ].object = 'pond'; 
+                                }
+                            }
+                        }
+                    }
+                    placed = true;
+                }
+            }
+        }
+        if (!placed) {
+          console.warn(`Could not place murky pond ${i+1} after ${maxAttempts} attempts.`);
+        }
+    }
+  }
+
+  // ADDED Method: Fallen Logs
+  createFallenLogs() {
+    console.log("Creating fallen logs");
+    const logCount = 30; // Number of fallen logs
+    const logMaterial = new THREE.MeshStandardMaterial({
+        color: 0x6F5B3E, // Weathered wood color
+        roughness: 0.9,
+        metalness: 0.05,
+        map: null // Consider adding a wood texture later
+    });
+
+    for (let i = 0; i < logCount; i++) {
+        const logLength = Math.random() * 3 + 1.5; // Length 1.5 to 4.5
+        const logRadius = Math.random() * 0.2 + 0.15; // Radius 0.15 to 0.35
+        
+        const logGeometry = new THREE.CylinderGeometry(logRadius, logRadius, logLength, 8); // Simple cylinder
+        const logMesh = new THREE.Mesh(logGeometry, logMaterial);
+        logMesh.castShadow = true;
+        logMesh.receiveShadow = true;
+
+        // Rotate to lay flat (around Z axis, then random Y rotation)
+        logMesh.rotation.z = Math.PI / 2;
+        logMesh.rotation.y = Math.random() * Math.PI * 2;
+
+        logMesh.userData = { type: 'fallen_log' };
+
+        // Place the log on the map using a similar logic to placeVegetation
+        // Try to place it on 'ground' tiles, avoiding water/ponds/other objects
+        this.placeVegetation(logMesh, 'fallen_log', logLength / (2 * this.tileSize)); // Use half length as radius approx
+    }
+  }
+
+  // ADDED Method: Dense Thickets
+  createDenseThickets() {
+    console.log("Creating dense thickets");
+    const thicketCount = 8; // Number of thicket patches
+    const maxThicketRadius = 4; // Radius in tiles
+    const minThicketRadius = 2;
+    const bushDensityFactor = 1.5; // How much denser bushes are in thickets
+
+    for (let i = 0; i < thicketCount; i++) {
+        let attempts = 0;
+        const maxAttempts = 50;
+        let placed = false;
+
+        while (attempts < maxAttempts && !placed) {
+            attempts++;
+            const thicketRadiusTiles = Math.random() * (maxThicketRadius - minThicketRadius) + minThicketRadius;
+            
+            // Find a potential center point
+            const x = Math.floor(Math.random() * this.mapSize);
+            const z = Math.floor(Math.random() * this.mapSize);
+
+            // Check if center is suitable (ground, away from edge)
+            if (this.mapData[x]?.[z]?.type === 'ground' && 
+                x > thicketRadiusTiles && x < this.mapSize - thicketRadiusTiles &&
+                z > thicketRadiusTiles && z < this.mapSize - thicketRadiusTiles) {
+
+                // Check clearance for the whole patch (less strict, allows existing bushes maybe)
+                let clearEnough = true;
+                let groundTileCount = 0;
+                for (let dx = -Math.ceil(thicketRadiusTiles); dx <= Math.ceil(thicketRadiusTiles); dx++) {
+                    for (let dz = -Math.ceil(thicketRadiusTiles); dz <= Math.ceil(thicketRadiusTiles); dz++) {
+                        const checkX = x + dx;
+                        const checkZ = z + dz;
+                        if (Math.sqrt(dx*dx + dz*dz) <= thicketRadiusTiles) {
+                            const tile = this.mapData[checkX]?.[checkZ];
+                            if (!tile || (tile.type !== 'ground' && tile.type !== 'bush')) { // Allow placing over existing ground/bushes
+                                // Forbid placing over water, ponds, rocks, logs, trees
+                                if (tile && (tile.type === 'water' || tile.type === 'pond_water' || tile.object === 'rock' || tile.object === 'fallen_log' || tile.object === 'tree' || tile.object === 'gnarled_tree')) {
+                                   clearEnough = false;
+                                   break;
+                                }
+                            }
+                            if (tile && tile.type === 'ground') {
+                                groundTileCount++;
+                            }
+                        }
+                    }
+                     if (!clearEnough) break;
+                }
+
+                // Ensure there's enough ground space to actually form a thicket
+                if (clearEnough && groundTileCount > Math.PI * minThicketRadius * minThicketRadius * 0.5) { 
+                    placed = true;
+                    console.log(`Placing thicket ${i+1} centered at [${x}, ${z}]`);
+
+                    // Mark tiles and add denser bushes
+                    for (let dx = -Math.ceil(thicketRadiusTiles); dx <= Math.ceil(thicketRadiusTiles); dx++) {
+                        for (let dz = -Math.ceil(thicketRadiusTiles); dz <= Math.ceil(thicketRadiusTiles); dz++) {
+                            const markX = x + dx;
+                            const markZ = z + dz;
+                            if (Math.sqrt(dx*dx + dz*dz) <= thicketRadiusTiles) {
+                                const tile = this.mapData[markX]?.[markZ];
+                                if (tile && (tile.type === 'ground' || tile.object === 'bush')) { // Only affect ground/existing bush tiles
+                                    tile.object = 'thicket_bush'; // Mark as part of a thicket (important for pathfinding later)
+                                    tile.impassable = true; // Mark as impassable
+
+                                    // Add extra bushes visually (optional, could be dense enough already)
+                                    if (Math.random() < 0.4 * bushDensityFactor) { // Increase chance based on density
+                                       // Re-use createBushes logic but place specifically here?
+                                       // For simplicity, let's just rely on the 'impassable' flag for now
+                                       // and assume existing bush generation might partially cover it.
+                                       // We could add a specific `placeBushInThicket(markX, markZ)` call here.
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (!placed) {
+             console.warn(`Could not place thicket ${i+1} after ${maxAttempts} attempts.`);
+        }
+    }
+    // Optional: After marking, could iterate again and place specific 'thicket bush' meshes if needed.
+}
 } 
