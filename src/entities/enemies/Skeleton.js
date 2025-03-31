@@ -19,6 +19,7 @@ export class Skeleton extends Enemy {
     
     // Create mesh
     this.createMesh();
+    this.createNameTag(); // Add name tag
   }
   
   createMesh() {

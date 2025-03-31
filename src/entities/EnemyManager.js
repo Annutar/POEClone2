@@ -1,6 +1,8 @@
 import { Skeleton } from './enemies/Skeleton.js';
 import { Wolf } from './enemies/Wolf.js';
 import { Goblin } from './enemies/Goblin.js';
+import { CaveBear } from './enemies/CaveBear.js';
+import { Sasquatch } from './enemies/Sasquatch.js';
 
 export class EnemyManager {
   constructor(game) {
@@ -9,9 +11,11 @@ export class EnemyManager {
     this.maxEnemies = 20;
     this.spawnRadius = 15;
     this.enemyTypes = [
-      { type: Skeleton, weight: 0.4 },
-      { type: Wolf, weight: 0.3 },
-      { type: Goblin, weight: 0.3 }
+      { type: Skeleton, weight: 0.3 },
+      { type: Wolf, weight: 0.25 },
+      { type: Goblin, weight: 0.25 },
+      { type: CaveBear, weight: 0.1 },
+      { type: Sasquatch, weight: 0.1 }
     ];
   }
   

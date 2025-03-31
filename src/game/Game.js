@@ -22,6 +22,7 @@ export class Game {
     this.mouse = { x: 0, y: 0 };
     this.raycaster = new THREE.Raycaster();
     this.mousePosition = new THREE.Vector2();
+    this.projectileManager = null;
   }
 
   init() {
@@ -72,6 +73,11 @@ export class Game {
     // Update items
     if (this.itemManager) {
       this.itemManager.update(delta);
+    }
+    
+    // Update Projectiles
+    if (this.projectileManager) {
+      this.projectileManager.update(delta);
     }
     
     // Update camera to follow player

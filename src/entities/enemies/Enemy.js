@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
 import { Entity } from '../Entity.js';
+import { Player } from '../Player.js'; // Import Player for type checking
 
 export class Enemy extends Entity {
   constructor(game) {
@@ -20,19 +21,102 @@ export class Enemy extends Entity {
     // Pathfinding
     this.pathUpdateInterval = 500; // ms
     this.lastPathUpdate = 0;
+
+    // Name Tag
+    this.nameTagSprite = null;
   }
   
+  // Need to call createMesh *before* createNameTag if nametag relies on mesh position
+  // We'll assume subclasses call createMesh() in their constructor AFTER super()
+  // and we'll call createNameTag just before the constructor finishes in subclasses
+  // OR we can call it lazily in update if the mesh exists.
+  // Let's try calling it from the subclass constructor for simplicity.
+
+  createNameTag(name = this.type) {
+    if (!this.mesh) {
+        console.warn('Cannot create name tag before mesh exists for', name);
+        return;
+    }
+    if (this.nameTagSprite) return; // Already created
+
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    const fontSize = 12;
+    const fontFamily = 'Georgia, serif';
+    context.font = `Bold ${fontSize}px ${fontFamily}`;
+    const textWidth = context.measureText(name).width;
+
+    canvas.width = textWidth + 6;
+    canvas.height = fontSize + 6;
+    
+    // Re-apply font after resizing canvas
+    context.font = `Bold ${fontSize}px ${fontFamily}`;
+    context.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(name, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+
+    const spriteMaterial = new THREE.SpriteMaterial({ 
+        map: texture, 
+        transparent: true,
+        depthTest: false
+    });
+    this.nameTagSprite = new THREE.Sprite(spriteMaterial);
+    
+    // Scale the sprite based on text size
+    const aspect = canvas.width / canvas.height;
+    const scaleFactor = 0.3;
+    this.nameTagSprite.scale.set(scaleFactor * aspect, scaleFactor, 1);
+
+    // Position above the mesh
+    // Calculate the bounding box to find the top
+    const bbox = new THREE.Box3().setFromObject(this.mesh);
+    const height = bbox.max.y - bbox.min.y;
+    this.nameTagSprite.position.set(0, height + 0.3, 0); // Position relative to mesh center
+
+    this.mesh.add(this.nameTagSprite); // Add sprite to the enemy mesh group
+    // console.log('Created name tag for:', name); // Reduce logging spam
+  }
+
+  updateNameTag() {
+      if (this.nameTagSprite) {
+          // Set fixed Y offset relative to the enemy mesh origin
+          // Adjust this value if needed based on average enemy model height/origin
+          const fixedYOffset = 1.2; 
+          this.nameTagSprite.position.y = fixedYOffset; 
+          
+          // SpriteMaterial should handle facing the camera automatically
+      }
+  }
+
   update(delta) {
     // Skip if dead
     if (this.isDead) return;
     
-    // Skip if player is dead
-    if (this.game.player.isDead) return;
+    // Ensure name tag exists
+    if (this.mesh && !this.nameTagSprite) {
+        this.createNameTag();
+    }
+
+    // Update name tag position/orientation
+    this.updateNameTag();
     
-    // Check if player is in detection range
+    // Skip if player is dead or game is loading
+    if (!this.game.player || this.game.player.isDead) return;
+    
+    // --- Calculate Effective Detection Range --- 
+    const playerScale = this.game.player.sizeMultiplier || 1.0;
+    // Make range increase with player scale, but perhaps not linearly (e.g., sqrt)
+    const effectiveDetectionRange = this.detectionRange * (1 + (playerScale - 1) * 0.5); // Example: Scale influences range by 50%
+    // -------------------------------------------
+    
+    // Check if player is in effective detection range
     const distanceToPlayer = this.mesh.position.distanceTo(this.game.player.mesh.position);
     
-    if (distanceToPlayer < this.detectionRange && this.isAggressive) {
+    if (distanceToPlayer < effectiveDetectionRange && this.isAggressive) {
       // Update path to player occasionally
       const now = Date.now();
       if (now - this.lastPathUpdate > this.pathUpdateInterval) {
@@ -174,5 +258,18 @@ export class Enemy extends Entity {
   makeSound() {
     // Base sound method - to be overridden by subclasses
     console.log('Enemy sound');
+  }
+
+  removeFromScene() {
+    if (this.mesh && this.mesh.parent) {
+      this.mesh.parent.remove(this.mesh);
+      // Consider disposing texture/material for name tag if removing many enemies
+      if(this.nameTagSprite && this.nameTagSprite.material.map) {
+          this.nameTagSprite.material.map.dispose();
+      }
+      if(this.nameTagSprite && this.nameTagSprite.material) {
+          this.nameTagSprite.material.dispose();
+      }
+    }
   }
 } 

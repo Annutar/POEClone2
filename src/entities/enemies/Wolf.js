@@ -22,6 +22,7 @@ export class Wolf extends Enemy {
     
     // Create mesh
     this.createMesh();
+    this.createNameTag(); // Add name tag
   }
   
   createMesh() {

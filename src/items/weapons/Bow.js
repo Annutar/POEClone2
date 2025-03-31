@@ -110,7 +110,14 @@ export class Bow extends Weapon {
     }
     
     // Position for floating
-    this.mesh.rotation.z = Math.PI / 2; // Stand upright when on ground
+    // this.mesh.rotation.z = Math.PI / 2; // REMOVE this line - rotation handled below
+
+    // --- Set Correct Orientation for Holding --- 
+    // Rotate the entire group so the bow stands upright along Y when held
+    this.mesh.rotation.x = Math.PI / 2; 
+    // Add Y rotation for diagonal placement across body
+    this.mesh.rotation.y = Math.PI / 4; 
+    // -------------------------------------------
     
     return this.mesh;
   }

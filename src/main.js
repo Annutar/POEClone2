@@ -6,6 +6,7 @@ import { ItemManager } from './items/ItemManager.js';
 import { EnemyManager } from './entities/EnemyManager.js';
 import { InputHandler } from './game/InputHandler.js';
 import { UI } from './game/UI.js';
+import { ProjectileManager } from './projectiles/ProjectileManager.js';
 
 // Loading management
 let loadingProgressBar;
@@ -46,13 +47,17 @@ try {
   // Setup async initialization
   async function initializeGame() {
     try {
-      // Initialize the game
+      // Initialize the game (core systems)
       game.init();
-      updateLoadingProgress(30);
+      updateLoadingProgress(20);
       
+      // Initialize Projectile Manager EARLY
+      game.projectileManager = new ProjectileManager(game);
+      updateLoadingProgress(30);
+
       // Initialize map with proper timing
       await initializeMapWithProgress(game);
-      updateLoadingProgress(70);
+      updateLoadingProgress(60);
       
       // Initialize remaining components
       await initializeEntities(game);

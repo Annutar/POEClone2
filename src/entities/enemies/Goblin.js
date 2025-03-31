@@ -24,6 +24,7 @@ export class Goblin extends Enemy {
     
     // Create mesh
     this.createMesh();
+    this.createNameTag(); // Add name tag
   }
   
   createMesh() {
@@ -235,15 +236,12 @@ export class Goblin extends Enemy {
     this.health = Math.max(0, this.health - amount);
     this.lastDamageSource = source;
     
-    // --- Add Flash Effect ---
+    // Flash effect
     this.playDamageEffect();
-    // ----------------------
     
     if (this.health <= 0) {
       this.die();
-    } else if (Math.random() < 0.3) { // Dodge on hit chance (keep this)
-      this.dodge();
-    }
+    } 
   }
   
   playDamageEffect() {
