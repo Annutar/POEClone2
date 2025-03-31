@@ -5,6 +5,7 @@ import { EnemyManager } from '../entities/EnemyManager.js';
 import { ItemManager } from '../items/ItemManager.js';
 import { InputHandler } from './InputHandler.js';
 import { UI } from './UI.js';
+import { AudioManager } from '../audio/AudioManager.js';
 
 export class Game {
   constructor() {
@@ -23,6 +24,7 @@ export class Game {
     this.raycaster = new THREE.Raycaster();
     this.mousePosition = new THREE.Vector2();
     this.projectileManager = null;
+    this.audioManager = null;
   }
 
   init() {
@@ -54,31 +56,106 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(this.renderer.domElement);
+
+    // Initialize Item Manager FIRST
+    this.itemManager = new ItemManager(this);
+    console.log("ItemManager initialized.");
+
+    // Initialize Map Generator
+    this.mapGenerator = new MapGenerator(this);
+    const mapContainer = this.mapGenerator.generateMap();
+    if (mapContainer) {
+         this.scene.add(mapContainer);
+         console.log("Map generated and added to scene.");
+    } else {
+        console.error("Map generation failed!");
+        // Potentially stop initialization if map fails
+        return; 
+    }
+
+    // Initialize Enemy Manager AFTER map is generated
+    try {
+        this.enemyManager = new EnemyManager(this); // Initialize EnemyManager
+        console.log("EnemyManager initialized.");
+        // Assuming EnemyManager handles initial spawning internally now
+        // this.spawnEnemies(5); // REMOVED direct call from Game
+        console.log(`EnemyManager will handle spawning.`); // Adjusted Log
+    } catch (error) {
+        console.error("Failed to initialize EnemyManager:", error);
+    }
+
+    // Initialize UI
+    try {
+        this.ui = new UI(this);
+        console.log("UI initialized.");
+    } catch (error) {
+        console.error("Failed to initialize UI:", error);
+        // UI might be optional, depends on design
+    }
+
+    // Initialize Audio Manager
+    try {
+      this.audioManager = new AudioManager(this.camera);
+      console.log("AudioManager initialized.");
+      // Load and play ambient sound
+      this.audioManager.loadAmbientSound(
+        'assets/audio/darkominous-lo-fi-piano-song-318669.mp3',
+        0.3, // Initial volume
+        () => {
+          console.log("Ambient sound loaded callback - attempting to play.");
+          this.audioManager.playAmbientSound();
+        }
+      );
+    } catch (error) {
+      console.error("Failed to initialize AudioManager:", error);
+    }
+
+    // Initialize Player AFTER MapGenerator and ItemManager
+    try {
+        this.player = new Player(this);
+        this.scene.add(this.player.mesh);
+        console.log("Player initialized and added to scene.");
+    } catch (error) {
+        console.error("Failed to initialize Player:", error);
+        return; // Stop if player fails
+    }
+    
+    // Link player's input handlers AFTER player exists
+    this.inputHandler = new InputHandler(this);
+
+    // Update UI initially AFTER player is created
+    if (this.ui && this.player) {
+      this.ui.updateHealth(this.player.currentHealth, this.player.maxHealth);
+      this.ui.updateMana(this.player.currentMana, this.player.maxMana);
+      this.ui.updateInventory(this.player.inventory, this.player.equipment);
+    } else {
+      console.warn("Could not perform initial UI update. UI or Player missing.");
+    }
+
+    console.log("Game initialization complete.");
+    this.startGameLoop(); // Make sure startGameLoop is defined
   }
-  
+
+  // Method to start the animation loop
+  startGameLoop() {
+    const animate = () => {
+        requestAnimationFrame(animate);
+        this.update(); // Call the game's update logic
+        this.render(); // Call the game's render logic
+    };
+    animate();
+    console.log("Game loop started.");
+  }
+
   update() {
     const delta = this.clock.getDelta();
     
-    // Update player
-    if (this.player) {
-      this.player.update(delta);
-    }
-    
-    // Update enemies
-    if (this.enemyManager) {
-      this.enemyManager.update(delta);
-    }
-    
-    // Update items
-    if (this.itemManager) {
-      this.itemManager.update(delta);
-    }
-    
-    // Update Projectiles
-    if (this.projectileManager) {
-      this.projectileManager.update(delta);
-    }
+    if (this.player) this.player.update(delta);
+    if (this.enemyManager) this.enemyManager.update(delta); // Update via manager
+    if (this.itemManager) this.itemManager.update(delta);
+    if (this.projectileManager) this.projectileManager.update(delta);
     
     // Update camera to follow player
     this.updateCamera();

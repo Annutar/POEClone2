@@ -34,6 +34,27 @@ export class UI {
     return element;
   }
 
+  // Add methods for direct health and mana updates from Game.js
+  updateHealth(current, max) {
+    try {
+      if (this.healthElement) {
+        this.healthElement.textContent = `Health: ${Math.round(current)}/${max}`;
+      }
+    } catch (error) {
+      console.warn('Error updating health display:', error.message);
+    }
+  }
+  
+  updateMana(current, max) {
+    try {
+      if (this.manaElement) {
+        this.manaElement.textContent = `Mana: ${Math.round(current)}/${max}`;
+      }
+    } catch (error) {
+      console.warn('Error updating mana display:', error.message);
+    }
+  }
+
   update() {
     try {
       // Throttle UI updates for performance
