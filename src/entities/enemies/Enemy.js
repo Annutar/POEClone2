@@ -187,6 +187,13 @@ export class Enemy extends Entity {
     // Face player
     this.mesh.lookAt(this.game.player.mesh.position);
     
+    // ---> ADD MESH CHECK <---
+    if (!this.mesh) {
+        console.warn('Enemy attack attempted before mesh was ready.');
+        return; // Don't proceed if mesh doesn't exist
+    }
+    // ---> END CHECK <---
+
     // Play attack animation
     this.attackAnimation();
     

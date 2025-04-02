@@ -193,6 +193,12 @@ export class CaveBear extends Enemy {
   }
   
   attackAnimation() {
+    // Add check to ensure mesh exists before animation
+    if (!this.mesh) {
+        console.warn("CaveBear attackAnimation called but mesh is undefined.");
+        return; 
+    }
+    
     // Heavy swipe animation
     const startRot = this.mesh.rotation.clone();
     const swipeAngle = Math.PI / 4; // 45 degree swipe

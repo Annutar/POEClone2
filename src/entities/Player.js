@@ -114,6 +114,7 @@ export class Player extends Entity {
     
     // Add the newly created mesh to the scene (important!)
     if (this.game.scene && this.mesh) {
+        console.log(`Adding player mesh to scene for weapon: ${weaponClassName}`);
         this.game.scene.add(this.mesh);
     } else {
         console.error("Could not add player mesh to scene. Scene or Mesh missing.");

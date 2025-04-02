@@ -40,14 +40,14 @@ export class Sasquatch extends Enemy {
 
     // Arms (Long Boxes)
     const armGeo = new THREE.BoxGeometry(0.2, 1.0, 0.2);
-    const leftArm = new THREE.Mesh(armGeo, bodyMaterial);
-    leftArm.position.set(-0.45, 1.0, 0); // Attach high on torso
-    leftArm.rotation.z = Math.PI / 8;
-    group.add(leftArm);
-    const rightArm = new THREE.Mesh(armGeo, bodyMaterial);
-    rightArm.position.set(0.45, 1.0, 0);
-    rightArm.rotation.z = -Math.PI / 8;
-    group.add(rightArm);
+    this.leftArm = new THREE.Mesh(armGeo, bodyMaterial);
+    this.leftArm.position.set(-0.45, 1.0, 0); // Attach high on torso
+    this.leftArm.rotation.z = Math.PI / 8;
+    group.add(this.leftArm);
+    this.rightArm = new THREE.Mesh(armGeo, bodyMaterial);
+    this.rightArm.position.set(0.45, 1.0, 0);
+    this.rightArm.rotation.z = -Math.PI / 8;
+    group.add(this.rightArm);
 
     // Legs (Thick Boxes)
     const legGeo = new THREE.BoxGeometry(0.25, 0.8, 0.25);
@@ -143,6 +143,12 @@ export class Sasquatch extends Enemy {
   attackAnimation() {
     // Ground slam simulation - move arms down quickly
     // Note: Actual ground interaction/effect would need more work
+
+    if (!this.leftArm || !this.rightArm) {
+      console.warn('Sasquatch attackAnimation called before arms were initialized.');
+      return; // Exit if arms aren't ready
+    }
+
     const leftArmStartRot = this.leftArm.rotation.clone();
     const rightArmStartRot = this.rightArm.rotation.clone();
     

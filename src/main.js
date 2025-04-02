@@ -129,8 +129,7 @@ try {
         updateLoadingProgress(80);
         
         // Initialize player
-        game.player = new Player(game);
-        game.scene.add(game.player.mesh);
+        // game.player = new Player(game); // REMOVED - Player is initialized within Game.init()
         updateLoadingProgress(85);
         
         // Initialize enemy manager

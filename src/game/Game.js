@@ -102,7 +102,7 @@ export class Game {
       // Load and play ambient sound
       this.audioManager.loadAmbientSound(
         'assets/audio/darkominous-lo-fi-piano-song-318669.mp3',
-        0.3, // Initial volume
+        0.8, // Increased Initial volume for testing
         () => {
           console.log("Ambient sound loaded callback - attempting to play.");
           this.audioManager.playAmbientSound();
@@ -115,8 +115,8 @@ export class Game {
     // Initialize Player AFTER MapGenerator and ItemManager
     try {
         this.player = new Player(this);
-        this.scene.add(this.player.mesh);
-        console.log("Player initialized and added to scene.");
+        // this.scene.add(this.player.mesh); // REMOVED - Player adds itself in setAppearanceBasedOnWeapon
+        console.log("Player initialized."); // Simplified log
     } catch (error) {
         console.error("Failed to initialize Player:", error);
         return; // Stop if player fails
