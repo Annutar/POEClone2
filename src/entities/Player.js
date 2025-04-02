@@ -45,12 +45,15 @@ export class Player extends Entity {
     this.targetPosition = null;
     this.isMoving = false;
     
-    // Kill-based power scaling
-    this.killCount = 0;
+    // Level System (replacing kill-based power scaling)
+    this.level = 1;
+    this.maxLevel = 20; // Level cap
+    this.currentXP = 0;
+    this.xpToNextLevel = 100; // Starting XP requirement
     this.sizeMultiplier = 1.0;
     this.speedMultiplier = 1.0;
     this.damageMultiplier = 1.0;
-    this.appliedBuffs = []; // To store descriptions of random buffs
+    this.appliedBuffs = []; // To store descriptions of level bonuses
     
     // Mesh and Appearance related
     this.mesh = null; // Mesh will be created based on starting weapon
@@ -542,6 +545,28 @@ export class Player extends Entity {
     this.health = this.maxHealth;
     this.mana = this.maxMana;
     
+    // Reset level system
+    this.level = 1;
+    this.currentXP = 0;
+    this.xpToNextLevel = 100; // Reset to initial XP requirement
+    
+    // Reset multipliers to base values
+    this.sizeMultiplier = 1.0;
+    this.speedMultiplier = 1.0;
+    this.damageMultiplier = 1.0;
+    
+    // Reset stats to base values
+    this.maxHealth = this.baseMaxHealth;
+    this.maxMana = this.baseMaxMana;
+    this.manaRegen = this.baseManaRegen;
+    this.attackSpeed = this.baseAttackSpeed;
+    this.attackDamage = this.baseAttackDamage;
+    this.attackRange = this.baseAttackRange;
+    this.moveSpeed = this.baseMoveSpeed;
+    
+    // Clear applied buffs
+    this.appliedBuffs = [];
+    
     // Reset appearance properties (color/rotation)
     if (this.mesh) { 
         this.mesh.rotation.x = 0; 
@@ -562,6 +587,13 @@ export class Player extends Entity {
     
     // Re-apply scale on respawn
     this.applyScale();
+    
+    // Update UI to show reset stats
+    if (this.game.ui) {
+      this.game.ui.update();
+    }
+    
+    console.log("Player respawned with reset level (Level 1)");
   }
   
   addToInventory(item) {
@@ -696,88 +728,335 @@ export class Player extends Entity {
     }
   }
   
-  // --- Power Scaling Mechanic ---
+  // --- Level System Mechanic ---
   onEnemyKilled(enemy) {
-    this.killCount++;
-    console.log(`%cKill count: ${this.killCount}`, 'color: yellow; font-weight: bold;');
-
-    // Increase size slightly
-    const sizeIncrease = 0.05; // Increased size buff
-    this.sizeMultiplier += sizeIncrease;
-    this.applyScale();
-    console.log(` Size Multiplier: ${this.sizeMultiplier.toFixed(2)} (+${sizeIncrease})`);
+    // Convert enemy kill to XP gain
+    let xpGain = 20; // Base XP for any enemy
     
-    // --- Scale Melee Range --- 
-    this.attackRange = this.baseAttackRange * this.sizeMultiplier;
-    console.log(` Attack Range: ${this.attackRange.toFixed(2)}`);
-    // -------------------------
-
-    // Increase speed slightly
-    const speedIncrease = 0.03; // Increased speed buff
-    this.speedMultiplier += speedIncrease;
-    this.attackSpeed = this.baseAttackSpeed * this.speedMultiplier; 
-    this.moveSpeed = this.baseMoveSpeed * this.speedMultiplier;
-    console.log(` Speed Multiplier: ${this.speedMultiplier.toFixed(2)} (+${speedIncrease}) -> Move: ${this.moveSpeed.toFixed(2)}, Attack: ${this.attackSpeed.toFixed(2)}`);
-
-    const damageIncrease = 0.08; // Increased damage buff
-    this.damageMultiplier += damageIncrease;
-    console.log(` Damage Multiplier: ${this.damageMultiplier.toFixed(2)} (+${damageIncrease})`);
-    
-    // --- Apply Random Powerful Buff Every 3 Kills (more frequent) ---
-    if (this.killCount > 0 && this.killCount % 3 === 0) {
-      console.log(`%cApplying powerful buff at ${this.killCount} kills...`, 'color: cyan');
-      this.applyRandomPowerfulBuff();
-    } else {
-      console.log(` Next powerful buff at ${Math.ceil(this.killCount / 3) * 3} kills`);
+    // Adjust XP based on enemy type
+    switch(enemy.constructor.name) {
+      case 'Skeleton':
+        xpGain = 15;
+        break;
+      case 'Wolf':
+        xpGain = 20;
+        break;
+      case 'Goblin':
+        xpGain = 25;
+        break;
+      case 'CaveBear':
+        xpGain = 35;
+        break;
+      case 'Sasquatch':
+        xpGain = 50;
+        break;
+      default:
+        xpGain = 15;
     }
     
-    // Heal the player more significantly
-    const healAmount = 15;
+    // Heal the player when killing an enemy
+    const healAmount = 10 + Math.floor(this.level / 2); // Scales with level
     this.health = Math.min(this.maxHealth, this.health + healAmount);
     console.log(` Healed for ${healAmount}. Current Health: ${Math.round(this.health)}/${this.maxHealth}`);
     
-    // Update UI immediately to show heal/stat changes
+    // Grant XP
+    this.gainXP(xpGain);
+    
+    // Update UI
     if (this.game.ui) {
-      this.game.ui.update(); 
+      this.game.ui.update();
+    }
+  }
+  
+  gainXP(amount) {
+    if (this.level >= this.maxLevel) {
+      console.log("Max level reached, no XP gained.");
+      return;
+    }
+    
+    this.currentXP += amount;
+    console.log(`Gained ${amount} XP. Total: ${this.currentXP}/${this.xpToNextLevel}`);
+    
+    // Check for level up
+    if (this.currentXP >= this.xpToNextLevel) {
+      this.onLevelUp();
+      
+      // Handle excess XP
+      const excess = this.currentXP - this.xpToNextLevel;
+      this.currentXP = excess;
+      
+      // Increase XP required for next level
+      this.xpToNextLevel = Math.floor(this.xpToNextLevel * 1.5);
+      console.log(`Next level requires ${this.xpToNextLevel} XP`);
+      
+      // Apply specific bonus for this level
+      this.applyLevelBonus();
     }
   }
 
-  applyRandomPowerfulBuff() {
-    const buffs = [
-      { type: 'health_increase', value: 35, description: '+35 Max Health' }, // Buffed
-      { type: 'mana_increase', value: 25, description: '+25 Max Mana' },   // Buffed
-      { type: 'damage_boost', value: 0.2, description: '+20% Damage Multiplier' }, // Buffed
-      { type: 'speed_boost', value: 0.1, description: '+10% Speed Multiplier' },  // Buffed
-      // { type: 'crit_chance', value: 0.05, description: '+5% Crit Chance (Not Implemented)' },
-      // { type: 'lifesteal', value: 0.02, description: '+2% Lifesteal (Not Implemented)' }
-    ];
+  onLevelUp() {
+    if (this.level < this.maxLevel) {
+      this.level++;
+      console.log(`%cLevel up! Current level: ${this.level}`, 'color: yellow; font-weight: bold;');
+      
+      // Create level up visual effects
+      this.createLevelUpEffects();
+      
+      // Increase size slightly
+      const sizeIncrease = 0.03; // Reduced from kill system for better scaling
+      this.sizeMultiplier += sizeIncrease;
+      this.applyScale();
+      
+      // Scale melee range with size
+      this.attackRange = this.baseAttackRange * this.sizeMultiplier;
+      
+      console.log(` Size Multiplier: ${this.sizeMultiplier.toFixed(2)} (+${sizeIncrease})`);
+      console.log(` Attack Range: ${this.attackRange.toFixed(2)}`);
+      
+      // Increase speed slightly
+      const speedIncrease = 0.02; // Reduced from kill system
+      this.speedMultiplier += speedIncrease;
+      this.attackSpeed = this.baseAttackSpeed * this.speedMultiplier; 
+      this.moveSpeed = this.baseMoveSpeed * this.speedMultiplier;
+      console.log(` Speed Multiplier: ${this.speedMultiplier.toFixed(2)} (+${speedIncrease})`);
+      console.log(` Move Speed: ${this.moveSpeed.toFixed(2)}, Attack Speed: ${this.attackSpeed.toFixed(2)}`);
 
-    const randomBuff = buffs[Math.floor(Math.random() * buffs.length)];
-    this.appliedBuffs.push(randomBuff.description);
-    console.log(`%c-> Applied Buff: ${randomBuff.description}`, 'color: lightgreen; font-weight: bold;');
-
-    switch (randomBuff.type) {
-      case 'health_increase':
-        this.maxHealth += randomBuff.value;
-        this.health += randomBuff.value; 
-        console.log(`   New Max Health: ${this.maxHealth}`);
+      // Increase damage slightly
+      const damageIncrease = 0.05; // Reduced from kill system
+      this.damageMultiplier += damageIncrease;
+      console.log(` Damage Multiplier: ${this.damageMultiplier.toFixed(2)} (+${damageIncrease})`);
+      
+      // Fully heal and restore mana on level up
+      this.health = this.maxHealth;
+      this.mana = this.maxMana;
+      console.log(` Fully healed and restored mana`);
+      
+      // Update UI immediately to show level/stat changes
+      if (this.game.ui) {
+        this.game.ui.update(); 
+      }
+    } else {
+      console.log("Max level reached!");
+    }
+  }
+  
+  createLevelUpEffects() {
+    if (!this.mesh || !this.game.scene) return;
+    
+    // Create a burst of particles around the player
+    const particleCount = 50 + (this.level * 10); // More particles at higher levels
+    const colors = [0xffff00, 0x00ffff, 0xff00ff, 0xffffff]; // Yellow, cyan, magenta, white
+    
+    // Create particle group
+    const particles = [];
+    
+    // Get player position
+    const playerPos = this.mesh.position.clone();
+    const height = this.modelHeight * this.sizeMultiplier;
+    
+    // Create particles
+    for (let i = 0; i < particleCount; i++) {
+      // Create a small sphere for each particle
+      const size = Math.random() * 0.1 + 0.05;
+      const geometry = new THREE.SphereGeometry(size, 6, 6);
+      const material = new THREE.MeshBasicMaterial({ 
+        color: colors[Math.floor(Math.random() * colors.length)],
+        transparent: true,
+        opacity: 1
+      });
+      
+      const particle = new THREE.Mesh(geometry, material);
+      
+      // Position around player
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * 2 + 1;
+      const x = playerPos.x + Math.cos(angle) * radius;
+      const z = playerPos.z + Math.sin(angle) * radius;
+      const y = playerPos.y + (Math.random() * height * 1.5);
+      
+      particle.position.set(x, y, z);
+      
+      // Add velocity for animation
+      particle.userData.velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 5,
+        Math.random() * 5 + 5,
+        (Math.random() - 0.5) * 5
+      );
+      
+      // Add to scene and tracking array
+      this.game.scene.add(particle);
+      particles.push(particle);
+    }
+    
+    // Create a light flash at player position
+    const light = new THREE.PointLight(0xffff00, 5, 10);
+    light.position.copy(playerPos);
+    light.position.y += height / 2;
+    this.game.scene.add(light);
+    
+    // Create a ring expanding outward
+    const ringGeometry = new THREE.RingGeometry(0.5, 0.6, 32);
+    const ringMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xffff00, 
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.7
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.position.copy(playerPos);
+    ring.position.y += 0.1; // Slightly above ground
+    ring.rotation.x = Math.PI / 2; // Lay flat
+    this.game.scene.add(ring);
+    
+    // Animate the particles and effects
+    let frame = 0;
+    const maxFrames = 60; // 1 second at 60fps
+    
+    const animate = () => {
+      frame++;
+      
+      // Update particles
+      for (let i = 0; i < particles.length; i++) {
+        const particle = particles[i];
+        
+        // Apply gravity
+        particle.userData.velocity.y -= 0.1;
+        
+        // Move particle
+        particle.position.x += particle.userData.velocity.x * 0.05;
+        particle.position.y += particle.userData.velocity.y * 0.05;
+        particle.position.z += particle.userData.velocity.z * 0.05;
+        
+        // Fade out
+        if (particle.material.opacity > 0) {
+          particle.material.opacity -= 0.02;
+        }
+      }
+      
+      // Update light
+      if (light.intensity > 0) {
+        light.intensity -= 0.2;
+      }
+      
+      // Update ring
+      ring.scale.x += 0.2;
+      ring.scale.y += 0.2;
+      ring.scale.z += 0.2;
+      ring.material.opacity -= 0.015;
+      
+      // Continue animation
+      if (frame < maxFrames) {
+        requestAnimationFrame(animate);
+      } else {
+        // Clean up
+        particles.forEach(particle => {
+          this.game.scene.remove(particle);
+          particle.geometry.dispose();
+          particle.material.dispose();
+        });
+        
+        this.game.scene.remove(light);
+        this.game.scene.remove(ring);
+        ring.geometry.dispose();
+        ring.material.dispose();
+      }
+    };
+    
+    // Start animation
+    animate();
+    
+    // Play a sound effect if audio is available
+    if (this.game.audioManager) {
+      // Option to play a level up sound here
+      // this.game.audioManager.playSound('levelUp', 0.5);
+    }
+  }
+  
+  applyLevelBonus() {
+    // Apply special bonuses at certain levels
+    let bonusApplied = false;
+    
+    switch(this.level) {
+      case 5:
+        // Level 5: Significant health boost
+        this.maxHealth += 50;
+        this.health += 50;
+        this.appliedBuffs.push("Level 5: +50 Max Health");
+        console.log(`%cLevel 5 Bonus: +50 Max Health (New Max: ${this.maxHealth})`, 'color: lightgreen; font-weight: bold;');
+        bonusApplied = true;
         break;
-      case 'mana_increase':
-        this.maxMana += randomBuff.value;
-        this.mana += randomBuff.value;
-        console.log(`   New Max Mana: ${this.maxMana}`);
+        
+      case 10:
+        // Level 10: Mana capacity and regeneration
+        this.maxMana += 50;
+        this.mana += 50;
+        this.manaRegen += 3;
+        this.appliedBuffs.push("Level 10: +50 Max Mana, +3 Mana Regen");
+        console.log(`%cLevel 10 Bonus: +50 Max Mana, +3 Mana Regen`, 'color: lightgreen; font-weight: bold;');
+        bonusApplied = true;
         break;
-      case 'damage_boost':
-        this.damageMultiplier += randomBuff.value;
-        console.log(`   New Damage Multiplier: ${this.damageMultiplier.toFixed(2)}`);
+        
+      case 15:
+        // Level 15: Major damage bonus
+        this.damageMultiplier += 0.25;
+        this.appliedBuffs.push("Level 15: +25% Damage");
+        console.log(`%cLevel 15 Bonus: +25% Damage Multiplier (New: ${this.damageMultiplier.toFixed(2)})`, 'color: lightgreen; font-weight: bold;');
+        bonusApplied = true;
         break;
-      case 'speed_boost':
-        this.speedMultiplier += randomBuff.value;
-        this.attackSpeed = this.baseAttackSpeed * this.speedMultiplier; 
+        
+      case 20:
+        // Level 20 (Max): Master of All
+        this.maxHealth += 100;
+        this.health += 100;
+        this.maxMana += 75;
+        this.mana += 75;
+        this.damageMultiplier += 0.2;
+        this.speedMultiplier += 0.15;
+        this.attackSpeed = this.baseAttackSpeed * this.speedMultiplier;
         this.moveSpeed = this.baseMoveSpeed * this.speedMultiplier;
-        console.log(`   New Speed Multiplier: ${this.speedMultiplier.toFixed(2)} -> Move: ${this.moveSpeed.toFixed(2)}, Attack: ${this.attackSpeed.toFixed(2)}`);
+        this.appliedBuffs.push("Level 20 MASTER: +100 Health, +75 Mana, +20% Damage, +15% Speed");
+        console.log(`%cMAX LEVEL 20 ACHIEVED! Major bonuses to all stats applied!`, 'color: gold; font-weight: bold; font-size: 14px');
+        bonusApplied = true;
         break;
     }
-    // UI update is handled in onEnemyKilled after this call
+    
+    // For other levels, apply a random small bonus
+    if (!bonusApplied && this.level % 2 === 0) { // Every even level that doesn't have a special bonus
+      const randomBonusType = Math.floor(Math.random() * 4);
+      
+      switch(randomBonusType) {
+        case 0: // Health
+          const healthBonus = 20;
+          this.maxHealth += healthBonus;
+          this.health += healthBonus;
+          this.appliedBuffs.push(`Level ${this.level}: +${healthBonus} Max Health`);
+          console.log(`%cLevel ${this.level} Bonus: +${healthBonus} Max Health`, 'color: lightgreen; font-weight: bold;');
+          break;
+          
+        case 1: // Mana
+          const manaBonus = 15;
+          this.maxMana += manaBonus;
+          this.mana += manaBonus;
+          this.appliedBuffs.push(`Level ${this.level}: +${manaBonus} Max Mana`);
+          console.log(`%cLevel ${this.level} Bonus: +${manaBonus} Max Mana`, 'color: lightgreen; font-weight: bold;');
+          break;
+          
+        case 2: // Damage
+          const damageBonus = 0.1;
+          this.damageMultiplier += damageBonus;
+          this.appliedBuffs.push(`Level ${this.level}: +10% Damage`);
+          console.log(`%cLevel ${this.level} Bonus: +10% Damage`, 'color: lightgreen; font-weight: bold;');
+          break;
+          
+        case 3: // Speed
+          const speedBonus = 0.05;
+          this.speedMultiplier += speedBonus;
+          this.attackSpeed = this.baseAttackSpeed * this.speedMultiplier;
+          this.moveSpeed = this.baseMoveSpeed * this.speedMultiplier;
+          this.appliedBuffs.push(`Level ${this.level}: +5% Speed`);
+          console.log(`%cLevel ${this.level} Bonus: +5% Speed`, 'color: lightgreen; font-weight: bold;');
+          break;
+      }
+    }
   }
 } 

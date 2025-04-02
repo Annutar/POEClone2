@@ -12,7 +12,7 @@ export class Skeleton extends Enemy {
     this.attackDamage = 5;
     this.attackRange = 1.2;
     this.attackSpeed = 0.8;
-    this.moveSpeed = 3;
+    this.moveSpeed = 5.0;
     this.detectionRange = 8;
     this.xpValue = 10;
     this.type = 'skeleton';

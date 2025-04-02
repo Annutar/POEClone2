@@ -12,7 +12,7 @@ export class Goblin extends Enemy {
     this.attackDamage = 6;
     this.attackRange = 1.5;
     this.attackSpeed = 1.5; // Fast attacks
-    this.moveSpeed = 4;
+    this.moveSpeed = 5.2; // Increased to be slightly faster than base player
     this.detectionRange = 12;
     this.xpValue = 12;
     this.type = 'goblin';

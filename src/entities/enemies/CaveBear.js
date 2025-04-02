@@ -12,7 +12,7 @@ export class CaveBear extends Enemy {
     this.attackDamage = 25; 
     this.attackRange = 1.2; 
     this.attackSpeed = 0.5; // Slow attacks
-    this.moveSpeed = 2.5;   // Slow movement
+    this.moveSpeed = 4.8;   // Increased to be slightly slower than base player
     this.detectionRange = 12; 
     this.xpValue = 50;
     this.type = 'cavebear';

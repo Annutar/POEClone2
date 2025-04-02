@@ -6,32 +6,43 @@ export class Enemy extends Entity {
   constructor(game) {
     super(game);
     
-    // Enemy specific attributes
+    // Base Enemy attributes (will be overridden by subclasses)
+    this.maxHealth = 10;
+    this.health = this.maxHealth;
+    this.attackDamage = 1;
+    this.attackRange = 1;
+    this.attackSpeed = 1;
+    
+    // Store base speed, initialize current speed and multiplier
+    this.baseMoveSpeed = 5.5; // Increased from 3 to be faster than player's base of 5
+    this.moveSpeed = this.baseMoveSpeed;
+    this.speedMultiplier = 1.0;
+    
     this.detectionRange = 10;
-    this.attackRange = 1.5;
-    this.attackDamage = 10;
-    this.attackSpeed = 1.0;
-    this.moveSpeed = 3;
-    this.lastAttackTime = 0;
+    this.xpValue = 5;
+    this.isDead = false;
     this.isAggressive = true;
     this.targetPosition = null;
-    this.type = 'enemy';
-    this.xpValue = 10;
-    
-    // Pathfinding
-    this.pathUpdateInterval = 500; // ms
+    this.lastAttackTime = 0;
     this.lastPathUpdate = 0;
-
-    // Name Tag
+    this.pathUpdateInterval = 1000;
+    this.lastDamageSource = null; // Track who damaged last for XP
+    
+    // Name tag related
     this.nameTagSprite = null;
   }
   
-  // Need to call createMesh *before* createNameTag if nametag relies on mesh position
-  // We'll assume subclasses call createMesh() in their constructor AFTER super()
-  // and we'll call createNameTag just before the constructor finishes in subclasses
-  // OR we can call it lazily in update if the mesh exists.
-  // Let's try calling it from the subclass constructor for simplicity.
-
+  // Override this method in subclasses to create specific meshes
+  createMesh() {
+    const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
+    const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    this.mesh = new THREE.Mesh(geometry, material);
+    this.mesh.position.y = 0.5;
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+    // Note: Adding mesh to scene is typically handled by EnemyManager
+  }
+  
   createNameTag(name = this.type) {
     if (!this.mesh) {
         console.warn('Cannot create name tag before mesh exists for', name);
@@ -96,22 +107,27 @@ export class Enemy extends Entity {
     // Skip if dead
     if (this.isDead) return;
     
-    // Ensure name tag exists
+    // Update name tag
     if (this.mesh && !this.nameTagSprite) {
-        this.createNameTag();
+      this.createNameTag();
+    } else if (this.nameTagSprite) {
+      this.updateNameTag();
     }
-
-    // Update name tag position/orientation
-    this.updateNameTag();
     
     // Skip if player is dead or game is loading
     if (!this.game.player || this.game.player.isDead) return;
     
+    // --- Update Effective Move Speed Based on Player Level ---
+    // Scale slightly slower than player's multiplier to allow kiting
+    const playerLevel = this.game.player.level;
+    const levelScaleFactor = 0.0195 * playerLevel; // Almost matches player's 0.02 per level
+    this.speedMultiplier = 1.0 + levelScaleFactor;
+    this.moveSpeed = this.baseMoveSpeed * this.speedMultiplier;
+    // ---------------------------------------------------------
+    
     // --- Calculate Effective Detection Range --- 
     const playerScale = this.game.player.sizeMultiplier || 1.0;
-    // Make range increase with player scale, but perhaps not linearly (e.g., sqrt)
-    const effectiveDetectionRange = this.detectionRange * (1 + (playerScale - 1) * 0.5); // Example: Scale influences range by 50%
-    // -------------------------------------------
+    const effectiveDetectionRange = this.detectionRange * (1 + (playerScale - 1) * 0.5); 
     
     // Check if player is in effective detection range
     const distanceToPlayer = this.mesh.position.distanceTo(this.game.player.mesh.position);
@@ -151,24 +167,17 @@ export class Enemy extends Entity {
   moveToTarget(delta) {
     if (!this.targetPosition) return;
     
-    // Calculate direction to target
     const direction = new THREE.Vector3();
     direction.subVectors(this.targetPosition, this.mesh.position);
     direction.y = 0; // Keep on ground plane
     
-    // If close enough, stop
-    if (direction.length() < 0.1) {
-      return;
-    }
+    if (direction.length() < 0.1) return;
     
-    // Normalize and scale by move speed
     direction.normalize();
+    // Use the dynamically updated this.moveSpeed
     const movement = direction.clone().multiplyScalar(delta * this.moveSpeed);
     
-    // Move enemy
     this.mesh.position.add(movement);
-    
-    // Rotate to face direction of movement
     this.mesh.lookAt(this.mesh.position.clone().add(direction));
   }
   

@@ -7,6 +7,11 @@ export class UI {
     this.manaElement = document.getElementById('mana') || this.createFallbackElement('mana');
     this.inventoryElement = document.getElementById('inventory') || this.createFallbackElement('inventory');
     
+    // Level display elements
+    this.levelTextElement = document.getElementById('level-text') || this.createFallbackElement('level-text');
+    this.levelBarElement = document.getElementById('level-bar') || this.createFallbackElement('level-bar');
+    this.xpTextElement = document.getElementById('xp-text') || this.createFallbackElement('xp-text');
+    
     // Tooltip element for item information
     this.tooltip = document.createElement('div');
     this.tooltip.id = 'tooltip';
@@ -73,6 +78,41 @@ export class UI {
         // Update mana display
         if (this.manaElement) {
           this.manaElement.textContent = `Mana: ${Math.round(this.game.player.mana)}/${this.game.player.maxMana}`;
+        }
+        
+        // Update level display
+        if (this.levelTextElement) {
+          // Show level with special formatting if at max level
+          const levelText = this.game.player.level >= this.game.player.maxLevel ?
+            `✨ Level ${this.game.player.level} (MAX) ✨` :
+            `Level ${this.game.player.level}`;
+          this.levelTextElement.textContent = levelText;
+        }
+        
+        // Update XP display
+        if (this.xpTextElement) {
+          if (this.game.player.level >= this.game.player.maxLevel) {
+            this.xpTextElement.textContent = 'XP: MAX LEVEL';
+            
+            // Set progress bar to 100% for max level
+            if (this.levelBarElement) {
+              this.levelBarElement.style.width = '100%';
+              // Special max level color gradient
+              this.levelBarElement.style.background = 'linear-gradient(to right, #ffd700, #ff5500)';
+              this.levelBarElement.style.boxShadow = '0 0 12px rgba(255, 215, 0, 0.7)';
+            }
+          } else {
+            const xpPercent = Math.round((this.game.player.currentXP / this.game.player.xpToNextLevel) * 100);
+            this.xpTextElement.textContent = `XP: ${this.game.player.currentXP}/${this.game.player.xpToNextLevel} (${xpPercent}%)`;
+            
+            // Update progress bar width
+            if (this.levelBarElement) {
+              this.levelBarElement.style.width = `${xpPercent}%`;
+              // Standard color gradient for normal levels
+              this.levelBarElement.style.background = 'linear-gradient(to right, #4a8af4, #42f4c8)';
+              this.levelBarElement.style.boxShadow = '0 0 8px rgba(66, 244, 200, 0.5)';
+            }
+          }
         }
       }
     } catch (error) {

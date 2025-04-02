@@ -12,7 +12,7 @@ export class Sasquatch extends Enemy {
     this.attackDamage = 20; 
     this.attackRange = 1.4; 
     this.attackSpeed = 0.7;
-    this.moveSpeed = 3.0; // Slightly faster than bear
+    this.moveSpeed = 5.0; // Increased to match base player speed
     this.detectionRange = 14;
     this.xpValue = 60;
     this.type = 'sasquatch';
