@@ -12,6 +12,7 @@ export class Enemy extends Entity {
     this.attackDamage = 1;
     this.attackRange = 1;
     this.attackSpeed = 1;
+    this.hitRadius = 0.8; // Increased default radius for collision detection
     
     // Store base speed, initialize current speed and multiplier
     this.baseMoveSpeed = 5.5; // Increased from 3 to be faster than player's base of 5

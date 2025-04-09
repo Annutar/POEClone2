@@ -6,70 +6,87 @@ export class Projectile {
     // Properties set during construction OR reset
     this.game = game;
     this.id = uuidv4(); // Assign a unique ID always
-    this.mesh = this.createMesh(options); // Create mesh on initial construction
+    this.isActive = false; // Start inactive by default for pooling
 
-    // Initialize with default/dummy values initially
-    this.type = 'generic';
-    this.source = null;
-    this.damage = 0;
-    this.speed = 15;
-    this.range = 30;
-    this.targetType = 'enemy';
-    this.color = 0xffffff;
-    this.scale = 1.0;
-    this.velocity = new THREE.Vector3();
-    this.distanceTraveled = 0;
-    this.isActive = false; // Start inactive by default
+    // Apply initial options FIRST to set properties like color, speed, etc.
+    this._applyOptions(options); 
+    
+    // Create mesh AFTER properties are set
+    this.mesh = this.createMesh(); 
 
-    // If options are provided during construction (e.g., pool initialization)
-    // apply them. This avoids calling reset during initial pool creation.
-    if (options && Object.keys(options).length > 0) {
-      this._applyOptions(options);
-      // Note: We don't add to manager here, pool init adds the mesh only.
-    }
+    // Initialize other necessary properties if not handled by _applyOptions
+    // Ensure mesh exists before adding properties potentially related to it
+    if (!this.velocity) this.velocity = new THREE.Vector3();
+    if (this.distanceTraveled === undefined) this.distanceTraveled = 0;
+
+    // Note: Mesh is added to the scene/manager by the pooling logic usually,
+    // not directly in the constructor unless specified.
   }
 
   // Method to apply options, used by constructor and reset
   _applyOptions(options = {}) {
     this.type = options.type || 'generic';
-    this.source = options.source;
+    this.source = options.source; // Who fired it? (e.g., player)
     this.damage = options.damage || 10;
     this.speed = options.speed || 15;
     this.range = options.range || 30;
-    this.targetType = options.targetType || 'enemy';
-    this.color = options.color || 0xffffff;
+    this.targetType = options.targetType || 'enemy'; // What does it hit?
+    this.color = options.color !== undefined ? options.color : 0xffffff; // Handle 0 as a valid color
     this.scale = options.scale || 1.0;
 
+    // Ensure velocity exists before copying
+    if (!this.velocity) this.velocity = new THREE.Vector3(); 
     this.velocity.copy(options.velocity || new THREE.Vector3(0, 0, 1)).normalize().multiplyScalar(this.speed);
+    
     this.distanceTraveled = 0;
     this.isActive = true; // Mark as active when reset/spawned
 
-    // Set initial position and look direction
-    if (options.position) {
-      this.mesh.position.copy(options.position);
-    }
-    this.mesh.lookAt(this.mesh.position.clone().add(this.velocity));
-    this.mesh.scale.set(this.scale, this.scale, this.scale);
-    
-    // Update material color if applicable
-    if (this.mesh.material && this.mesh.material.color) {
-        this.mesh.material.color.setHex(this.color);
+    // Set initial position and look direction if mesh exists
+    if (this.mesh) {
+      if (options.position) {
+        this.mesh.position.copy(options.position);
+      }
+      // Ensure velocity is not zero before looking at it
+      if (this.velocity.lengthSq() > 0.0001) {
+         this.mesh.lookAt(this.mesh.position.clone().add(this.velocity));
+      }
+      this.mesh.scale.set(this.scale, this.scale, this.scale);
+      
+      // Update material color if applicable and mesh exists
+      if (this.mesh.material && this.mesh.material.color) {
+          this.mesh.material.color.setHex(this.color);
+      }
+      // Update emissive color if applicable
+      if (this.mesh.material && this.mesh.material.emissive) {
+          this.mesh.material.emissive.setHex(this.color); // Often emissive matches base color
+      }
     }
   }
 
   // Reset method for reusing pooled objects
   reset(options) {
       console.log(`Resetting ${this.constructor.name} projectile.`);
-      this._applyOptions(options);
-      // Any subclass-specific reset logic can go in overridden reset methods
+      // Ensure mesh exists before applying options that might modify it
+      if (!this.mesh) {
+          console.warn("Projectile mesh missing during reset, recreating.");
+          this.mesh = this.createMesh(); 
+          // Potentially add mesh back to container if it was removed? Depends on pooling strategy.
+          if (this.game.projectileManager && this.game.projectileManager.projectileContainer && !this.mesh.parent) {
+              this.game.projectileManager.projectileContainer.add(this.mesh);
+          }
+      }
+      this._applyOptions(options); 
+      this.mesh.visible = true; // Ensure it's visible on reset
+      // Subclass-specific reset logic should be called via super.reset(options) in the subclass
   }
 
-  createMesh(options) {
+  createMesh() { // Removed options from parameters
     // Basic sphere as a placeholder
     const geometry = new THREE.SphereGeometry(0.1, 8, 8);
-    const material = new THREE.MeshBasicMaterial({ color: this.color }); // Initial color
+    // Use this.color now, which should be set by _applyOptions
+    const material = new THREE.MeshBasicMaterial({ color: this.color !== undefined ? this.color : 0xffffff }); 
     const mesh = new THREE.Mesh(geometry, material);
-    // Scale is applied in _applyOptions/reset
+    mesh.scale.set(this.scale, this.scale, this.scale); // Apply scale immediately
     return mesh;
   }
 

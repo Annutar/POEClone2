@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
-import { PowerUp } from './PowerUp.js'; // Assuming PowerUp is needed elsewhere? If not, remove.
+import { PowerUp } from '../entities/PowerUp.js'; // Assuming PowerUp is needed elsewhere? If not, remove.
 import { MagicOrb } from '../projectiles/MagicOrb.js'; // Import specific types we'll pool
 import { Arrow } from '../projectiles/Arrow.js';
 
@@ -17,15 +17,30 @@ export class ProjectileManager {
   }
 
   initializePool(size) {
-      for (let i = 0; i < size; i++) {
-          // Pre-populate pool with generic types, maybe based on player start?
-          // For simplicity, let's start with MagicOrbs as they are common
-          const proj = new MagicOrb(this.game, { position: new THREE.Vector3(-9999, -9999, -9999) });
+      const halfSize = Math.floor(size / 2);
+      const remainder = size % 2; // Handle odd pool sizes
+
+      console.log(`Initializing pool: ${halfSize} Arrows, ${halfSize + remainder} MagicOrbs`);
+
+      // Create Arrows
+      for (let i = 0; i < halfSize; i++) {
+          const proj = new Arrow(this.game, { position: new THREE.Vector3(-9999, -9999, -9999) });
           proj.isActive = false;
           this.projectileContainer.add(proj.mesh);
-          proj.mesh.visible = false; // Hide inactive projectiles
+          proj.mesh.visible = false; 
           this.projectilePool.push(proj);
       }
+      
+      // Create MagicOrbs
+      for (let i = 0; i < halfSize + remainder; i++) {
+           const proj = new MagicOrb(this.game, { position: new THREE.Vector3(-9999, -9999, -9999) });
+          proj.isActive = false;
+          this.projectileContainer.add(proj.mesh);
+          proj.mesh.visible = false;
+          this.projectilePool.push(proj);
+      }
+      
+      console.log(`Pool initialized with ${this.projectilePool.length} total projectiles.`);
   }
 
   getProjectile(ProjectileClass, options) {
