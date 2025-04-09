@@ -81,22 +81,32 @@ export class ProjectileManager {
   }
 
   checkCollision(projectile) {
-      if (!this.game.enemyManager || !this.game.enemyManager.enemies) return;
+      if (!this.game.enemyManager || !this.game.enemyManager.enemies || !projectile.mesh) return;
+
+      // Create a bounding sphere for the projectile
+      if (!projectile.mesh.geometry.boundingSphere) {
+          projectile.mesh.geometry.computeBoundingSphere();
+      }
+      const projectileSphere = projectile.mesh.geometry.boundingSphere.clone();
+      projectileSphere.center.copy(projectile.mesh.position);
+      // Apply projectile scale to sphere radius
+      projectileSphere.radius *= projectile.scale || 1.0; 
 
       const enemies = this.game.enemyManager.enemies;
+      const enemyBox = new THREE.Box3(); // Reuse Box3 object
+      
       for (let i = 0; i < enemies.length; i++) {
           const enemy = enemies[i];
-          if (!enemy || enemy.isDead || !projectile.isActive) continue;
+          if (!enemy || enemy.isDead || !projectile.isActive || !enemy.mesh) continue;
 
-          // Basic distance check (using squared distance for performance)
-          const distanceSq = projectile.mesh.position.distanceToSquared(enemy.mesh.position);
-          const hitRadiusSq = (enemy.hitRadius || 0.5) * (enemy.hitRadius || 0.5); // Use enemy hit radius
-          
-          if (distanceSq < hitRadiusSq) {
-              // Hit detected!
+          // Get the enemy's world bounding box
+          enemyBox.setFromObject(enemy.mesh, true); // Use true for precise check
+
+          // Check for intersection between enemy box and projectile sphere
+          if (enemyBox.intersectsSphere(projectileSphere)) {
+              console.log(`Collision detected: ${projectile.type} with ${enemy.type}`);
               projectile.onHit(enemy);
-              // No need to check further enemies for this projectile
-              break; 
+              break; // Collision detected, stop checking other enemies for this projectile
           }
       }
   }

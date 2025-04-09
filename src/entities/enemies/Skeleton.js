@@ -15,6 +15,7 @@ export class Skeleton extends Enemy {
     this.moveSpeed = 5.0;
     this.detectionRange = 8;
     this.xpValue = 10;
+    this.hitRadius = 1.0; // Specific, larger radius for Skeletons
     this.type = 'skeleton';
     
     // Create mesh
