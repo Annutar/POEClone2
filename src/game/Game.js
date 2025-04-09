@@ -6,6 +6,7 @@ import { ItemManager } from '../items/ItemManager.js';
 import { InputHandler } from './InputHandler.js';
 import { UI } from './UI.js';
 import { AudioManager } from '../audio/AudioManager.js';
+import { ProjectileManager } from '../projectiles/ProjectileManager.js';
 
 export class Game {
   constructor() {
@@ -27,7 +28,7 @@ export class Game {
     this.audioManager = null;
   }
 
-  init() {
+  async init() {
     // Initialize scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x222222);
@@ -71,17 +72,22 @@ export class Game {
          console.log("Map generated and added to scene.");
     } else {
         console.error("Map generation failed!");
-        // Potentially stop initialization if map fails
         return; 
+    }
+
+    // Initialize Projectile Manager EARLY (before player/enemies that might shoot)
+    try {
+        this.projectileManager = new ProjectileManager(this);
+        console.log("ProjectileManager initialized.");
+    } catch (error) {
+        console.error("Failed to initialize ProjectileManager:", error);
     }
 
     // Initialize Enemy Manager AFTER map is generated
     try {
-        this.enemyManager = new EnemyManager(this); // Initialize EnemyManager
+        this.enemyManager = new EnemyManager(this); 
         console.log("EnemyManager initialized.");
-        // Assuming EnemyManager handles initial spawning internally now
-        // this.spawnEnemies(5); // REMOVED direct call from Game
-        console.log(`EnemyManager will handle spawning.`); // Adjusted Log
+        console.log(`EnemyManager will handle spawning.`);
     } catch (error) {
         console.error("Failed to initialize EnemyManager:", error);
     }
@@ -92,17 +98,16 @@ export class Game {
         console.log("UI initialized.");
     } catch (error) {
         console.error("Failed to initialize UI:", error);
-        // UI might be optional, depends on design
     }
 
     // Initialize Audio Manager
     try {
       this.audioManager = new AudioManager(this.camera);
       console.log("AudioManager initialized.");
-      // Load and play ambient sound
+      // Load and play ambient sound asynchronously (no need to await here if background loading is okay)
       this.audioManager.loadAmbientSound(
         'assets/audio/darkominous-lo-fi-piano-song-318669.mp3',
-        0.8, // Increased Initial volume for testing
+        0.14,
         () => {
           console.log("Ambient sound loaded callback - attempting to play.");
           this.audioManager.playAmbientSound();
@@ -115,27 +120,28 @@ export class Game {
     // Initialize Player AFTER MapGenerator and ItemManager
     try {
         this.player = new Player(this);
-        // this.scene.add(this.player.mesh); // REMOVED - Player adds itself in setAppearanceBasedOnWeapon
-        console.log("Player initialized."); // Simplified log
+        // *** Await the player's async initialization ***
+        await this.player.init(); 
+        console.log("Player initialized successfully."); 
     } catch (error) {
         console.error("Failed to initialize Player:", error);
         return; // Stop if player fails
     }
     
-    // Link player's input handlers AFTER player exists
+    // Link player's input handlers AFTER player exists and is initialized
     this.inputHandler = new InputHandler(this);
 
-    // Update UI initially AFTER player is created
+    // Update UI initially AFTER player is fully initialized
     if (this.ui && this.player) {
-      this.ui.updateHealth(this.player.currentHealth, this.player.maxHealth);
-      this.ui.updateMana(this.player.currentMana, this.player.maxMana);
+      this.ui.updateHealth(this.player.health, this.player.maxHealth);
+      this.ui.updateMana(this.player.mana, this.player.maxMana);
       this.ui.updateInventory(this.player.inventory, this.player.equipment);
     } else {
       console.warn("Could not perform initial UI update. UI or Player missing.");
     }
 
     console.log("Game initialization complete.");
-    this.startGameLoop(); // Make sure startGameLoop is defined
+    this.startGameLoop();
   }
 
   // Method to start the animation loop
@@ -153,7 +159,7 @@ export class Game {
     const delta = this.clock.getDelta();
     
     if (this.player) this.player.update(delta);
-    if (this.enemyManager) this.enemyManager.update(delta); // Update via manager
+    if (this.enemyManager) this.enemyManager.update(delta);
     if (this.itemManager) this.itemManager.update(delta);
     if (this.projectileManager) this.projectileManager.update(delta);
     

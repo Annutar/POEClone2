@@ -7,6 +7,7 @@ import { Axe } from '../items/weapons/Axe.js';
 import { MagicOrb } from '../projectiles/MagicOrb.js';
 import { Arrow } from '../projectiles/Arrow.js';
 import { Projectile } from '../projectiles/Projectile.js';
+import { WizardModel } from './WizardModel.js';
 
 export class Player extends Entity {
   constructor(game) {
@@ -49,29 +50,37 @@ export class Player extends Entity {
     this.level = 1;
     this.maxLevel = 20; // Level cap
     this.currentXP = 0;
-    this.xpToNextLevel = 100; // Starting XP requirement
+    this.xpToNextLevel = 50; // Halved initial XP (was 100)
     this.sizeMultiplier = 1.0;
     this.speedMultiplier = 1.0;
     this.damageMultiplier = 1.0;
     this.appliedBuffs = []; // To store descriptions of level bonuses
     
     // Mesh and Appearance related
-    this.mesh = null; // Mesh will be created based on starting weapon
+    this.mesh = null; // Mesh will be set during async init
     this.weaponContainer = new THREE.Object3D(); // Keep the container
     this.modelHeight = 1; // Default height, might be overridden by model
     
-    // Give the player a starting weapon AND set appearance
-    this.giveRandomStartingWeapon();
+    // DON'T give starting weapon here
+    // this.giveRandomStartingWeapon(); 
+
+    this.wizardModel = new WizardModel(game);
+  }
+
+  // New async initialization method
+  async init() {
+    console.log("Initializing Player appearance and weapon...");
+    await this.giveRandomStartingWeapon(); // This now handles async appearance setting
+    console.log("Player appearance and weapon initialized.");
   }
   
-  setAppearanceBasedOnWeapon(weaponClassName) {
+  async setAppearanceBasedOnWeapon(weaponClassName) {
     console.log(`Setting appearance based on: ${weaponClassName}`);
-    // Remove old mesh if it exists (e.g., on respawn with different logic)
+    // Remove old mesh if it exists
     if (this.mesh) {
         if (this.mesh.parent) {
             this.mesh.parent.remove(this.mesh);
         }
-        // Dispose geometry/material if needed
     }
 
     let weaponOffsetX = 0.3;
@@ -80,10 +89,15 @@ export class Player extends Entity {
 
     switch(weaponClassName) {
         case 'Staff':
-            this.mesh = this.createMageMesh();
-            this.modelHeight = 1.8;
-            weaponOffsetX = 0.35; // Slightly further out for robes
-            weaponOffsetY = 0.6;
+            try {
+                this.mesh = await this.wizardModel.load();
+                this.modelHeight = 1.8;
+                weaponOffsetX = 0.35;
+                weaponOffsetY = 0.6;
+            } catch (error) {
+                console.error('Failed to load wizard model, falling back to default mesh:', error);
+                this.mesh = this.createMageMesh();
+            }
             break;
         case 'Bow':
             this.mesh = this.createArcherMesh();
@@ -281,9 +295,11 @@ export class Player extends Entity {
     }
   }
   
-  update(delta) {
-    // Skip update if dead
-    if (this.isDead) return;
+  update(deltaTime) {
+    super.update(deltaTime);
+    if (this.wizardModel) {
+        this.wizardModel.update(deltaTime);
+    }
     
     // Calculate effective move speed
     const effectiveMoveSpeed = this.baseMoveSpeed * this.speedMultiplier;
@@ -295,7 +311,7 @@ export class Player extends Entity {
       this.targetPosition = null; 
       this.isMoving = true;
       
-      const movement = direction.clone().multiplyScalar(delta * effectiveMoveSpeed);
+      const movement = direction.clone().multiplyScalar(deltaTime * effectiveMoveSpeed);
       this.mesh.position.add(movement);
       
       // Rotate character to face movement direction
@@ -306,7 +322,7 @@ export class Player extends Entity {
     // -------------------------------------
     
     // Regenerate mana
-    this.mana = Math.min(this.maxMana, this.mana + this.manaRegen * delta);
+    this.mana = Math.min(this.maxMana, this.mana + this.manaRegen * deltaTime);
   }
   
   attack(target) {
@@ -548,7 +564,7 @@ export class Player extends Entity {
     // Reset level system
     this.level = 1;
     this.currentXP = 0;
-    this.xpToNextLevel = 100; // Reset to initial XP requirement
+    this.xpToNextLevel = 50; // Reset to initial XP requirement
     
     // Reset multipliers to base values
     this.sizeMultiplier = 1.0;
@@ -769,74 +785,58 @@ export class Player extends Entity {
   }
   
   gainXP(amount) {
-    if (this.level >= this.maxLevel) {
-      console.log("Max level reached, no XP gained.");
-      return;
-    }
-    
+    if (this.isDead) return;
     this.currentXP += amount;
-    console.log(`Gained ${amount} XP. Total: ${this.currentXP}/${this.xpToNextLevel}`);
+    console.log(`Gained ${amount} XP. Total XP: ${this.currentXP}/${this.xpToNextLevel}`);
     
     // Check for level up
-    if (this.currentXP >= this.xpToNextLevel) {
-      this.onLevelUp();
-      
-      // Handle excess XP
-      const excess = this.currentXP - this.xpToNextLevel;
-      this.currentXP = excess;
-      
-      // Increase XP required for next level
-      this.xpToNextLevel = Math.floor(this.xpToNextLevel * 1.5);
-      console.log(`Next level requires ${this.xpToNextLevel} XP`);
-      
-      // Apply specific bonus for this level
-      this.applyLevelBonus();
+    while (this.currentXP >= this.xpToNextLevel) {
+      this.levelUp();
+    }
+
+    // Update UI (Use the general update method)
+    if (this.game.ui) {
+      this.game.ui.update(); // Use the general UI update
     }
   }
 
-  onLevelUp() {
-    if (this.level < this.maxLevel) {
-      this.level++;
-      console.log(`%cLevel up! Current level: ${this.level}`, 'color: yellow; font-weight: bold;');
-      
-      // Create level up visual effects
-      this.createLevelUpEffects();
-      
-      // Increase size slightly
-      const sizeIncrease = 0.03; // Reduced from kill system for better scaling
-      this.sizeMultiplier += sizeIncrease;
-      this.applyScale();
-      
-      // Scale melee range with size
-      this.attackRange = this.baseAttackRange * this.sizeMultiplier;
-      
-      console.log(` Size Multiplier: ${this.sizeMultiplier.toFixed(2)} (+${sizeIncrease})`);
-      console.log(` Attack Range: ${this.attackRange.toFixed(2)}`);
-      
-      // Increase speed slightly
-      const speedIncrease = 0.02; // Reduced from kill system
-      this.speedMultiplier += speedIncrease;
-      this.attackSpeed = this.baseAttackSpeed * this.speedMultiplier; 
-      this.moveSpeed = this.baseMoveSpeed * this.speedMultiplier;
-      console.log(` Speed Multiplier: ${this.speedMultiplier.toFixed(2)} (+${speedIncrease})`);
-      console.log(` Move Speed: ${this.moveSpeed.toFixed(2)}, Attack Speed: ${this.attackSpeed.toFixed(2)}`);
+  levelUp() {
+    if (this.level >= this.maxLevel) return;
 
-      // Increase damage slightly
-      const damageIncrease = 0.05; // Reduced from kill system
-      this.damageMultiplier += damageIncrease;
-      console.log(` Damage Multiplier: ${this.damageMultiplier.toFixed(2)} (+${damageIncrease})`);
-      
-      // Fully heal and restore mana on level up
-      this.health = this.maxHealth;
-      this.mana = this.maxMana;
-      console.log(` Fully healed and restored mana`);
-      
-      // Update UI immediately to show level/stat changes
-      if (this.game.ui) {
-        this.game.ui.update(); 
-      }
-    } else {
-      console.log("Max level reached!");
+    this.currentXP -= this.xpToNextLevel; // Carry over excess XP
+    this.level++;
+    console.log(`Leveled up to Level ${this.level}!`);
+
+    // --- Trigger Visual Effects --- 
+    this.createLevelUpEffects(); 
+    // ----------------------------
+
+    // --- Apply Level Bonuses --- 
+    // Example: Increase max health and mana
+    const healthIncrease = Math.floor(this.maxHealth * 0.1); // +10% base max health
+    const manaIncrease = Math.floor(this.maxMana * 0.05); // +5% base max mana
+    this.maxHealth += healthIncrease;
+    this.maxMana += manaIncrease;
+    this.health = this.maxHealth; // Full heal on level up
+    this.mana = this.maxMana;   // Full mana restore
+    this.appliedBuffs.push(`Level ${this.level}: +${healthIncrease} Max Health, +${manaIncrease} Max Mana`);
+    
+    // Example: Slight stat boosts (adjust multipliers)
+    this.speedMultiplier += 0.01; // +1% speed per level
+    this.damageMultiplier += 0.02; // +2% damage per level
+    this.appliedBuffs.push(`Level ${this.level}: +1% Move Speed, +2% Damage`);
+    
+    // Example: Increase size slightly (visual effect)
+    this.sizeMultiplier += 0.01;
+    this.applyScale(); // Re-apply scale to the mesh
+    // --- End Level Bonuses ---
+
+    // Calculate XP for the next level (use halved base)
+    this.xpToNextLevel = Math.floor(50 * Math.pow(1.15, this.level - 1));
+
+    // Update UI (Use the general update method)
+    if (this.game.ui) {
+      this.game.ui.update(); // Use the general UI update
     }
   }
   
@@ -968,7 +968,7 @@ export class Player extends Entity {
     // Play a sound effect if audio is available
     if (this.game.audioManager) {
       // Option to play a level up sound here
-      // this.game.audioManager.playSound('levelUp', 0.5);
+      this.game.audioManager.playSound('assets/audio/Levelup.mp3', 0.875); // Increased volume by 25% (from 0.7)
     }
   }
   

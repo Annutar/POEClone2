@@ -17,6 +17,7 @@ export class AudioManager {
         this.audioLoader = new THREE.AudioLoader();
         
         this.ambientSound = null; // To hold the loaded ambient sound
+        this.soundCache = {}; // Cache for loaded sounds
 
         console.log("AudioManager initialized.");
     }
@@ -94,6 +95,77 @@ export class AudioManager {
     setAmbientVolume(volume) {
         if (this.ambientSound) {
             this.ambientSound.setVolume(Math.max(0, Math.min(1, volume))); // Clamp volume between 0 and 1
+        }
+    }
+
+    /**
+     * Loads and plays a sound effect once.
+     * Caches loaded sounds for efficiency.
+     * @param {string} filePath - Path to the audio file.
+     * @param {number} [volume=0.5] - Playback volume (0 to 1).
+     * @param {boolean} [positional=false] - If true, create a PositionalAudio.
+     * @param {THREE.Object3D} [sourceObject=null] - If positional, the object emitting the sound.
+     */
+    playSound(filePath, volume = 0.5, positional = false, sourceObject = null) {
+        // Check cache first
+        if (this.soundCache[filePath]) {
+            this._playCachedSound(this.soundCache[filePath], volume, positional, sourceObject);
+            return;
+        }
+
+        console.log(`Loading sound effect: ${filePath}`);
+        this.audioLoader.load(
+            filePath,
+            (buffer) => {
+                console.log(`Sound effect loaded: ${filePath}`);
+                // Cache the buffer
+                this.soundCache[filePath] = buffer;
+                this._playCachedSound(buffer, volume, positional, sourceObject);
+            },
+            undefined, // onProgress not needed for short sounds
+            (err) => {
+                console.error(`Error loading sound effect ${filePath}:`, err);
+            }
+        );
+    }
+
+    _playCachedSound(buffer, volume, positional, sourceObject) {
+        let sound;
+        if (positional && sourceObject) {
+            // Create positional audio attached to the source object
+            sound = new THREE.PositionalAudio(this.listener);
+            sourceObject.add(sound); // Attach sound to the object
+        } else {
+            // Create non-positional (global) audio
+            sound = new THREE.Audio(this.listener);
+        }
+
+        sound.setBuffer(buffer);
+        sound.setLoop(false);
+        sound.setVolume(volume);
+        
+        // Ensure audio context is running
+        if (this.listener.context.state === 'suspended') {
+            this.listener.context.resume().then(() => {
+                console.log("Audio context resumed for sound effect.");
+                sound.play();
+                // Optional: Clean up positional sound after playing if needed
+                if (positional && sourceObject) {
+                    sound.onEnded = () => {
+                        sourceObject.remove(sound);
+                        // console.log("Removed positional sound after playing.");
+                    };
+                }
+            }).catch(e => console.error("Error resuming audio context for sound effect:", e));
+        } else {
+            sound.play();
+             // Optional: Clean up positional sound after playing if needed
+             if (positional && sourceObject) {
+                 sound.onEnded = () => {
+                     sourceObject.remove(sound);
+                     // console.log("Removed positional sound after playing.");
+                 };
+             }
         }
     }
 
