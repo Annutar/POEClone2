@@ -343,10 +343,9 @@ export class Player extends Entity {
     const expiryTime = now + duration * 1000;
 
     if (this.activePowerUps[type]) {
-        // Stack effect: increase count and reset duration
-        this.activePowerUps[type].count += 1; 
+        // Power-up exists, just reset duration (no stacking count)
         this.activePowerUps[type].expiry = expiryTime; 
-        console.log(`Stacked ${type} power-up. Count: ${this.activePowerUps[type].count}`);
+        console.log(`Refreshed duration for ${type} power-up.`);
     } else {
         // New effect
         this.activePowerUps[type] = {
@@ -513,6 +512,8 @@ export class Player extends Entity {
   }
   
   playAttackAnimation() {
+    // REMOVED: Weapon scaling animation
+    /*
     if (this.equipment.weapon && this.equipment.weapon.mesh) {
       const weaponMesh = this.equipment.weapon.mesh;
       const originalScale = weaponMesh.scale.clone();
@@ -526,6 +527,8 @@ export class Player extends Entity {
         weaponMesh.scale.copy(originalScale);
       }, 150);
     }
+    */
+    // You could add other animation effects here if desired (e.g., slight lunge, sound)
   }
   
   takeDamage(amount) {

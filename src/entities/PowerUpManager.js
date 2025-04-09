@@ -49,9 +49,11 @@ export class PowerUpManager {
     }
 
     // Method for enemies to call
-    trySpawnDrop(enemyPosition, dropChance = 0.1) { // 100% chance default for testing
-        console.log(`[PowerUpManager.trySpawnDrop] Checking drop chance (${dropChance})...`);
-        if (Math.random() < dropChance) {
+    trySpawnDrop(enemyPosition, _dropChance = 0.1) { // Parameter ignored, uses fixed 8%
+        const multiShotDropChance = 0.08; // Hardcoded 8% chance for MultiShot
+        console.log(`[PowerUpManager.trySpawnDrop] Checking MultiShot drop chance (${multiShotDropChance})...`);
+        
+        if (Math.random() < multiShotDropChance) {
             console.log(`[PowerUpManager.trySpawnDrop] Drop chance success! Spawning MultiShot.`);
             // For now, only spawn MultiShot
             const type = 'MultiShot';
