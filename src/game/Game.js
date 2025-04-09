@@ -7,6 +7,7 @@ import { InputHandler } from './InputHandler.js';
 import { UI } from './UI.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { ProjectileManager } from '../projectiles/ProjectileManager.js';
+import { PowerUpManager } from '../entities/PowerUpManager.js';
 
 export class Game {
   constructor() {
@@ -26,6 +27,7 @@ export class Game {
     this.mousePosition = new THREE.Vector2();
     this.projectileManager = null;
     this.audioManager = null;
+    this.powerUpManager = null;
   }
 
   async init() {
@@ -81,6 +83,13 @@ export class Game {
         console.log("ProjectileManager initialized.");
     } catch (error) {
         console.error("Failed to initialize ProjectileManager:", error);
+    }
+
+    // Initialize PowerUp Manager
+    try {
+        this.powerUpManager = new PowerUpManager(this);
+    } catch (error) {
+        console.error("Failed to initialize PowerUpManager:", error);
     }
 
     // Initialize Enemy Manager AFTER map is generated
@@ -162,6 +171,7 @@ export class Game {
     if (this.enemyManager) this.enemyManager.update(delta);
     if (this.itemManager) this.itemManager.update(delta);
     if (this.projectileManager) this.projectileManager.update(delta);
+    if (this.powerUpManager) this.powerUpManager.update(delta);
     
     // Update camera to follow player
     this.updateCamera();

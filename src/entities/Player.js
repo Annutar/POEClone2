@@ -65,6 +65,9 @@ export class Player extends Entity {
     // this.giveRandomStartingWeapon(); 
 
     this.wizardModel = new WizardModel(game);
+
+    // Power-up tracking
+    this.activePowerUps = {}; // e.g., { 'MultiShot': { count: 1, expiry: timestamp } }
   }
 
   // New async initialization method
@@ -104,18 +107,14 @@ export class Player extends Entity {
             this.modelHeight = 1.6;
             weaponOffsetX = 0.25; 
             weaponOffsetY = 0.45; 
-            weaponOffsetZ = 0.2; // Move bow forward
-            break;
-        case 'Axe':
-            this.mesh = this.createMarauderMesh();
-            this.modelHeight = 1.7;
-            weaponOffsetX = 0.4; // Further out for bulkier model
-            weaponOffsetY = 0.55;
+            weaponOffsetZ = 0.2; 
             break;
         default:
-            console.warn("Unknown weapon class for appearance, creating default mesh.");
-            this.mesh = this.createDefaultMesh(); // Fallback
-            this.modelHeight = 1.0;
+            console.warn(`Unsupported or melee weapon class '${weaponClassName}' for appearance, creating default Mage mesh.`);
+            this.mesh = this.createMageMesh(); // Fallback to Mage mesh for now
+            this.modelHeight = 1.8;
+            weaponOffsetX = 0.35;
+            weaponOffsetY = 0.6;
             break;
     }
 
@@ -301,6 +300,9 @@ export class Player extends Entity {
         this.wizardModel.update(deltaTime);
     }
     
+    // Update active power-up durations
+    this.updatePowerUps(deltaTime);
+    
     // Calculate effective move speed
     const effectiveMoveSpeed = this.baseMoveSpeed * this.speedMultiplier;
     
@@ -325,24 +327,50 @@ export class Player extends Entity {
     this.mana = Math.min(this.maxMana, this.mana + this.manaRegen * deltaTime);
   }
   
+  updatePowerUps(deltaTime) {
+      const now = Date.now();
+      for (const type in this.activePowerUps) {
+          const powerUp = this.activePowerUps[type];
+          if (now >= powerUp.expiry) {
+              console.log(`${type} power-up expired.`);
+              delete this.activePowerUps[type];
+          }
+      }
+  }
+
+  applyPowerUp(type, duration, value) {
+    const now = Date.now();
+    const expiryTime = now + duration * 1000;
+
+    if (this.activePowerUps[type]) {
+        // Stack effect: increase count and reset duration
+        this.activePowerUps[type].count += 1; 
+        this.activePowerUps[type].expiry = expiryTime; 
+        console.log(`Stacked ${type} power-up. Count: ${this.activePowerUps[type].count}`);
+    } else {
+        // New effect
+        this.activePowerUps[type] = {
+            count: 1,
+            value: value, // Store the value per stack (e.g., +5 projectiles)
+            expiry: expiryTime
+        };
+        console.log(`Applied new ${type} power-up.`);
+    }
+    // Potential UI update needed here if power-ups are displayed
+  }
+  
   attack(target) {
-    // This method now handles ONLY direct clicks on enemies
     if (this.isDead || !this.equipment.weapon) return;
 
     const weaponType = this.equipment.weapon.constructor.name;
     
+    // Only allow ranged attacks (Staff or Bow)
     if (weaponType === 'Staff' || weaponType === 'Bow') {
-        // RANGED: Launch projectile directly at the target enemy
         this.mesh.lookAt(target.mesh.position); 
-        this.launchProjectile(target.mesh.position, weaponType); // Pass target position
+        this.launchProjectile(target.mesh.position, weaponType); 
     } else { 
-        // MELEE: Perform melee attack logic
-        const distance = this.mesh.position.distanceTo(target.mesh.position);
-        if (distance > this.attackRange) {
-            console.log("Target out of melee range");
-            return; 
-        }
-        this.performMeleeAttack(target);
+        console.log("Melee attacks are currently disabled.");
+        return; // Prevent melee attacks
     }
     
     this.playAttackAnimation();
@@ -373,31 +401,18 @@ export class Player extends Entity {
   }
 
   performMeleeAttack(target) {
-    this.mesh.lookAt(target.mesh.position);
-    
-    // Calculate base damage (already includes weapon damage)
-    let damage = this.baseAttackDamage;
-    if (this.equipment.weapon) {
-      damage += this.equipment.weapon.damage || 0;
-      if (this.equipment.weapon.attributes) {
-        this.equipment.weapon.attributes.forEach(attr => {
-          if (attr.type === 'damage_multiplier') damage *= attr.value;
-        });
-      }
-    }
-    const effectiveDamage = damage * this.damageMultiplier;
-    target.takeDamage(effectiveDamage, this); 
+    // Melee attacks disabled
+    console.log("Attempted to perform melee attack (disabled).");
+    return; 
   }
 
-  launchProjectile(targetPosition, weaponType) { // Changed parameter name
-      // --- Mana Check ---
+  launchProjectile(targetPosition, weaponType) {
       const manaCost = 5; 
       if (this.mana < manaCost) {
           console.log("Not enough mana to fire!");
           return; 
       }
-      // ------------------
-
+      
       // Player already looking at targetPosition (from attack or attackTowardsPoint)
       // this.mesh.lookAt(targetPosition); // This is now redundant here
 
@@ -426,40 +441,60 @@ export class Player extends Entity {
           launchOffset = this.modelHeight * 0.5; 
       }
 
+      // Determine number of projectiles based on MultiShot power-up
+      let projectileCount = 1;
+      const multiShotPowerUp = this.activePowerUps['MultiShot'];
+      if (multiShotPowerUp) {
+          projectileCount += multiShotPowerUp.count * multiShotPowerUp.value; // 1 + (stackCount * valuePerStack)
+      }
       
-      // Calculate spawn position
+      // Calculate spawn position and base direction
       const spawnPosition = this.mesh.position.clone();
-      const direction = new THREE.Vector3();
-      // Calculate direction vector FROM player TO targetPosition
-      direction.subVectors(targetPosition, this.mesh.position).normalize();
-      
-      // Adjust spawn height and position it slightly in front
+      const baseDirection = new THREE.Vector3().subVectors(targetPosition, this.mesh.position).normalize();
       spawnPosition.y += launchOffset * this.sizeMultiplier; 
-      spawnPosition.addScaledVector(direction, 0.5 * this.sizeMultiplier); 
+      spawnPosition.addScaledVector(baseDirection, 0.5 * this.sizeMultiplier); 
 
-      // Use the calculated direction for velocity
-      const velocity = direction.multiplyScalar(ProjectileClass.prototype.speed || 15); 
-      
-      // --- Deduct Mana ---
+      // --- Deduct Mana (only once per attack) --- 
       this.mana -= manaCost;
       console.log(`Used ${manaCost} mana. Current Mana: ${this.mana.toFixed(1)}`);
        if (this.game.ui) {
            this.game.ui.update(); 
        }
-      // -----------------
+      // ----------------------------------------
 
-      // Create the projectile
-      new ProjectileClass(this.game, {
-          position: spawnPosition,
-          velocity: velocity, // Use the calculated velocity
-          damage: effectiveDamage,
-          color: projectileColor,
-          source: this,
-          targetType: 'enemy',
-          scale: this.sizeMultiplier // Pass player scale to projectile
-      });
+      const spreadAngle = projectileCount > 1 ? THREE.MathUtils.degToRad(15) : 0; // 15 degree total spread
+      const angleStep = projectileCount > 1 ? spreadAngle / (projectileCount - 1) : 0;
+      const startAngle = projectileCount > 1 ? -spreadAngle / 2 : 0;
+
+      console.log(`Launching ${projectileCount} projectile(s)`);
       
-      console.log(`Launched ${weaponType === 'Staff' ? 'MagicOrb' : 'Arrow'} towards point`);
+      for (let i = 0; i < projectileCount; i++) {
+          let direction = baseDirection.clone();
+          if (projectileCount > 1) {
+              const angle = startAngle + i * angleStep;
+              direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+          }
+
+          const velocity = direction.multiplyScalar(ProjectileClass.prototype.speed || 15); 
+
+          // --- Get projectile from pool instead of creating new --- 
+          const projectile = this.game.projectileManager.getProjectile(ProjectileClass, {
+              position: spawnPosition.clone(), 
+              velocity: velocity,
+              damage: effectiveDamage,
+              color: projectileColor,
+              source: this,
+              targetType: 'enemy',
+              scale: this.sizeMultiplier
+          });
+          
+          // Check if a projectile was successfully retrieved from the pool
+          if (!projectile) {
+              console.warn(`Could not get ${ProjectileClass.name} from pool, skipping this shot.`);
+              continue; // Skip if pool is exhausted
+          }
+          // ------------------------------------------------------------
+      }
   }
   
   getProjectileColorFromWeapon(weapon) {
@@ -628,6 +663,12 @@ export class Player extends Entity {
         return;
       }
       
+      // Prevent equipping Axe
+      if (item instanceof Axe) {
+          console.log("Cannot equip melee weapons (Axe) currently.");
+          return;
+      }
+
       if (item instanceof Weapon) {
         // Unequip previous weapon if exists
         if (this.equipment.weapon) {
@@ -668,8 +709,8 @@ export class Player extends Entity {
   
   giveRandomStartingWeapon() {
     try {
-      // Choose a random weapon type
-      const weaponTypes = [Staff, Bow, Axe];
+      // Choose a random weapon type (excluding Axe)
+      const weaponTypes = [Staff, Bow]; // Removed Axe
       const WeaponClass = weaponTypes[Math.floor(Math.random() * weaponTypes.length)];
       
       // --- SET APPEARANCE FIRST ---
@@ -812,23 +853,28 @@ export class Player extends Entity {
     // ----------------------------
 
     // --- Apply Level Bonuses --- 
-    // Example: Increase max health and mana
-    const healthIncrease = Math.floor(this.maxHealth * 0.1); // +10% base max health
-    const manaIncrease = Math.floor(this.maxMana * 0.05); // +5% base max mana
+    // Increase max health and mana
+    const healthIncrease = Math.floor(this.maxHealth * 0.1); 
+    const manaIncrease = Math.floor(this.maxMana * 0.05); 
     this.maxHealth += healthIncrease;
     this.maxMana += manaIncrease;
     this.health = this.maxHealth; // Full heal on level up
     this.mana = this.maxMana;   // Full mana restore
     this.appliedBuffs.push(`Level ${this.level}: +${healthIncrease} Max Health, +${manaIncrease} Max Mana`);
     
-    // Example: Slight stat boosts (adjust multipliers)
-    this.speedMultiplier += 0.01; // +1% speed per level
-    this.damageMultiplier += 0.02; // +2% damage per level
+    // Increase mana regeneration (scaling more aggressively with level)
+    const manaRegenIncrease = 0.1 + (this.level * 0.08); // Adjusted formula for steeper scaling
+    this.manaRegen += manaRegenIncrease;
+    this.appliedBuffs.push(`Level ${this.level}: +${manaRegenIncrease.toFixed(2)} Mana Regen/sec`);
+
+    // Slight stat boosts (multipliers)
+    this.speedMultiplier += 0.01; 
+    this.damageMultiplier += 0.02; 
     this.appliedBuffs.push(`Level ${this.level}: +1% Move Speed, +2% Damage`);
     
-    // Example: Increase size slightly (visual effect)
+    // Increase size slightly (visual effect)
     this.sizeMultiplier += 0.01;
-    this.applyScale(); // Re-apply scale to the mesh
+    this.applyScale(); 
     // --- End Level Bonuses ---
 
     // Calculate XP for the next level (use halved base)
@@ -838,6 +884,7 @@ export class Player extends Entity {
     if (this.game.ui) {
       this.game.ui.update(); // Use the general UI update
     }
+    console.log(`New Mana Regen: ${this.manaRegen.toFixed(1)}/sec`); // Log the new regen rate
   }
   
   createLevelUpEffects() {

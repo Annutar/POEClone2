@@ -3,40 +3,73 @@ import { v4 as uuidv4 } from 'https://cdn.jsdelivr.net/npm/uuid@9.0.1/dist/esm-b
 
 export class Projectile {
   constructor(game, options = {}) {
+    // Properties set during construction OR reset
     this.game = game;
-    this.id = uuidv4();
-    this.type = options.type || 'generic'; // e.g., 'magic_orb', 'arrow'
-    this.source = options.source; // Who shot this (e.g., Player instance)
+    this.id = uuidv4(); // Assign a unique ID always
+    this.mesh = this.createMesh(options); // Create mesh on initial construction
+
+    // Initialize with default/dummy values initially
+    this.type = 'generic';
+    this.source = null;
+    this.damage = 0;
+    this.speed = 15;
+    this.range = 30;
+    this.targetType = 'enemy';
+    this.color = 0xffffff;
+    this.scale = 1.0;
+    this.velocity = new THREE.Vector3();
+    this.distanceTraveled = 0;
+    this.isActive = false; // Start inactive by default
+
+    // If options are provided during construction (e.g., pool initialization)
+    // apply them. This avoids calling reset during initial pool creation.
+    if (options && Object.keys(options).length > 0) {
+      this._applyOptions(options);
+      // Note: We don't add to manager here, pool init adds the mesh only.
+    }
+  }
+
+  // Method to apply options, used by constructor and reset
+  _applyOptions(options = {}) {
+    this.type = options.type || 'generic';
+    this.source = options.source;
     this.damage = options.damage || 10;
     this.speed = options.speed || 15;
-    this.range = options.range || 30; // Max distance projectile travels
-    this.targetType = options.targetType || 'enemy'; // What does this projectile target? ('enemy', 'player')
+    this.range = options.range || 30;
+    this.targetType = options.targetType || 'enemy';
     this.color = options.color || 0xffffff;
-    this.scale = options.scale || 1.0; // Add scale property
+    this.scale = options.scale || 1.0;
 
-    this.velocity = options.velocity ? options.velocity.clone().normalize().multiplyScalar(this.speed) : new THREE.Vector3(0, 0, 1).multiplyScalar(this.speed);
+    this.velocity.copy(options.velocity || new THREE.Vector3(0, 0, 1)).normalize().multiplyScalar(this.speed);
     this.distanceTraveled = 0;
-    this.isActive = true;
+    this.isActive = true; // Mark as active when reset/spawned
 
-    // Create mesh (to be overridden by subclasses)
-    this.mesh = this.createMesh(options);
+    // Set initial position and look direction
     if (options.position) {
       this.mesh.position.copy(options.position);
     }
-    
-    // Rotate mesh to face velocity direction
     this.mesh.lookAt(this.mesh.position.clone().add(this.velocity));
+    this.mesh.scale.set(this.scale, this.scale, this.scale);
+    
+    // Update material color if applicable
+    if (this.mesh.material && this.mesh.material.color) {
+        this.mesh.material.color.setHex(this.color);
+    }
+  }
 
-    // Add to the scene via ProjectileManager
-    this.game.projectileManager.addProjectile(this);
+  // Reset method for reusing pooled objects
+  reset(options) {
+      console.log(`Resetting ${this.constructor.name} projectile.`);
+      this._applyOptions(options);
+      // Any subclass-specific reset logic can go in overridden reset methods
   }
 
   createMesh(options) {
     // Basic sphere as a placeholder
     const geometry = new THREE.SphereGeometry(0.1, 8, 8);
-    const material = new THREE.MeshBasicMaterial({ color: this.color });
+    const material = new THREE.MeshBasicMaterial({ color: this.color }); // Initial color
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.scale.set(this.scale, this.scale, this.scale); // Apply scale
+    // Scale is applied in _applyOptions/reset
     return mesh;
   }
 
@@ -50,15 +83,13 @@ export class Projectile {
 
     // Check range limit
     if (this.distanceTraveled >= this.range) {
-      this.destroy();
+      this.destroy(); // Deactivate
       return;
     }
-
-    // Collision detection (handled by ProjectileManager)
   }
 
   onHit(target) {
-    if (!this.isActive) return; // Prevent multiple hits from same projectile
+    if (!this.isActive) return; 
     
     console.log(`${this.type} hit target:`, target);
     
@@ -70,8 +101,7 @@ export class Projectile {
     // Optional: Add impact effect (particle, sound)
     this.playImpactEffect();
 
-    // Destroy projectile after hit
-    this.destroy();
+    this.destroy(); // Deactivate
   }
   
   playImpactEffect(){
@@ -83,18 +113,16 @@ export class Projectile {
       }
   }
 
+  // Deactivates the projectile, manager handles returning to pool
   destroy() {
+    console.log(`Deactivating ${this.type} projectile (ID: ${this.id}).`);
     this.isActive = false;
-    this.game.projectileManager.removeProjectile(this);
-    // Effects like fading out could be added here
   }
 
-  removeFromScene() {
+  // No longer needed as mesh stays in scene, just hidden
+  /* removeFromScene() {
       if (this.mesh && this.mesh.parent) {
           this.mesh.parent.remove(this.mesh);
-          // Optional: Dispose geometry and material to free memory
-          // if (this.mesh.geometry) this.mesh.geometry.dispose();
-          // if (this.mesh.material) this.mesh.material.dispose();
       }
-  }
+  } */
 } 
