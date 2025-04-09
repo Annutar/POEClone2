@@ -67,4 +67,13 @@ export class MagicOrb extends Projectile {
   // destroy() {
   //   super.destroy();
   // }
+
+  // Override reset if specific properties need handling
+  reset(options) {
+    super.reset(options); // Call base reset first
+    // Reset MagicOrb specific things, e.g., update light color
+    if (this.light) {
+        this.light.color.setHex(this.color);
+    }
+  }
 } 

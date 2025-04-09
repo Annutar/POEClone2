@@ -12,6 +12,7 @@ export class Enemy extends Entity {
     this.attackDamage = 1;
     this.attackRange = 1;
     this.attackSpeed = 1;
+    this.hitRadius = 0.8; // Increased default radius for collision detection
     
     // Store base speed, initialize current speed and multiplier
     this.baseMoveSpeed = 5.5; // Increased from 3 to be faster than player's base of 5
@@ -258,10 +259,34 @@ export class Enemy extends Entity {
   }
   
   die() {
-    super.die();
-    
-    // Drop loot
-    this.dropLoot();
+    if (this.isDead) return;
+    this.isDead = true;
+    console.log(`${this.type} died`);
+
+    // Grant XP to player
+    if (this.game.player && !this.game.player.isDead) {
+      this.game.player.onEnemyKilled(this);
+    }
+
+    // Try to drop a power-up
+    if (this.game.powerUpManager) {
+        console.log(`[Enemy.die] Attempting power-up drop for ${this.type}...`);
+        this.game.powerUpManager.trySpawnDrop(this.mesh.position, 1.0); // 100% drop chance for testing
+    } else {
+        console.warn(`[Enemy.die] PowerUpManager not found when ${this.type} died.`);
+    }
+
+    // Play death animation
+    this.playDeathAnimation();
+
+    // Set a timer to remove the enemy object after animation
+    setTimeout(() => {
+      this.removeFromScene();
+      // Optional: Notify EnemyManager to remove this enemy from its list
+      if (this.game.enemyManager) {
+        this.game.enemyManager.removeEnemy(this);
+      }
+    }, 1500); // Adjust timeout based on death animation length
   }
   
   dropLoot() {

@@ -275,13 +275,21 @@ export class Goblin extends Enemy {
   die() {
     if (this.isDead) return;
     this.isDead = true;
-    console.log('Goblin died');
+    console.log(`${this.type} died`);
 
-    // If killed by player, trigger kill effect
-    if (this.lastDamageSource instanceof Player) {
-        this.game.player.onEnemyKilled(this);
+    // Grant XP to player
+    if (this.game.player && !this.game.player.isDead) {
+      this.game.player.onEnemyKilled(this);
     }
-    
+
+    // Try to drop a power-up
+    if (this.game.powerUpManager) {
+        console.log(`[Goblin.die] Attempting power-up drop...`);
+        this.game.powerUpManager.trySpawnDrop(this.mesh.position, 1.0); // 100% drop chance for testing
+    } else {
+        console.warn(`[Goblin.die] PowerUpManager not found.`);
+    }
+
     // Tell friends this goblin died
     this.friends.forEach(friend => {
       if (friend && !friend.isDead) {
@@ -299,12 +307,15 @@ export class Goblin extends Enemy {
     this.friends = []; // Clear own friend list
 
     // Play death animation
-    this.playDeathAnimation(); // Generic death for now
-    
-    // Remove from game world after delay
+    this.playDeathAnimation();
+
+    // Set timer for removal
     setTimeout(() => {
       this.removeFromScene();
-    }, 1000); 
+      if (this.game.enemyManager) {
+        this.game.enemyManager.removeEnemy(this);
+      }
+    }, 1500); // Adjust timeout based on death animation length
   }
   
   playDeathAnimation() {

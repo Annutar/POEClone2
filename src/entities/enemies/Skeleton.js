@@ -15,6 +15,7 @@ export class Skeleton extends Enemy {
     this.moveSpeed = 5.0;
     this.detectionRange = 8;
     this.xpValue = 10;
+    this.hitRadius = 1.0; // Specific, larger radius for Skeletons
     this.type = 'skeleton';
     
     // Create mesh
@@ -159,22 +160,33 @@ export class Skeleton extends Enemy {
   }
   
   die() {
-    if (this.isDead) return; // Already dead
+    if (this.isDead) return;
     this.isDead = true;
-    console.log('Skeleton died');
+    console.log(`${this.type} died`);
 
-    // If the last damage source was the player, trigger the kill effect
-    if (this.lastDamageSource instanceof Player) {
+    // Grant XP to player
+    if (this.game.player && !this.game.player.isDead) {
       this.game.player.onEnemyKilled(this);
     }
 
-    // Play death effects
+    // Try to drop a power-up
+    if (this.game.powerUpManager) {
+        console.log(`[Skeleton.die] Attempting power-up drop...`);
+        this.game.powerUpManager.trySpawnDrop(this.mesh.position, 1.0); // 100% drop chance for testing
+    } else {
+        console.warn(`[Skeleton.die] PowerUpManager not found.`);
+    }
+
+    // Play death animation
     this.playDeathAnimation();
-    
-    // Remove from game world after animation (delay)
+
+    // Set timer for removal
     setTimeout(() => {
       this.removeFromScene();
-    }, 1000); 
+      if (this.game.enemyManager) {
+        this.game.enemyManager.removeEnemy(this);
+      }
+    }, 1800); // Skeleton might have a longer collapse animation
   }
   
   playDeathAnimation() {

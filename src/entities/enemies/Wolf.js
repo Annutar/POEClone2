@@ -248,20 +248,31 @@ export class Wolf extends Enemy {
   die() {
     if (this.isDead) return;
     this.isDead = true;
-    console.log('Wolf died');
+    console.log(`${this.type} died`);
 
-    // If killed by player, trigger kill effect
-    if (this.lastDamageSource instanceof Player) {
+    // Grant XP to player
+    if (this.game.player && !this.game.player.isDead) {
       this.game.player.onEnemyKilled(this);
     }
 
+    // Try to drop a power-up
+    if (this.game.powerUpManager) {
+        console.log(`[Wolf.die] Attempting power-up drop...`);
+        this.game.powerUpManager.trySpawnDrop(this.mesh.position, 1.0); // 100% drop chance for testing
+    } else {
+        console.warn(`[Wolf.die] PowerUpManager not found.`);
+    }
+
     // Play death animation
-    this.playDeathAnimation(); // Generic death animation for now
-    
-    // Remove from game world after delay
+    this.playDeathAnimation();
+
+    // Set timer for removal
     setTimeout(() => {
       this.removeFromScene();
-    }, 1000); 
+      if (this.game.enemyManager) {
+        this.game.enemyManager.removeEnemy(this);
+      }
+    }, 1500); // Adjust timeout based on death animation length
   }
   
   playDeathAnimation() {

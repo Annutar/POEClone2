@@ -27,6 +27,8 @@ export class UI {
     // Add UI update throttling
     this.lastUpdateTime = 0;
     this.updateInterval = 100; // Update UI max 10 times per second
+    
+    this.powerUpsElement = document.getElementById('powerups') || this.createFallbackElement('powerups'); // Get power-up element
   }
 
   // Helper method to create fallback UI elements
@@ -114,10 +116,39 @@ export class UI {
             }
           }
         }
+        
+        // Update Power-ups display
+        this.updatePowerUpsDisplay(this.game.player.activePowerUps);
       }
     } catch (error) {
       console.warn('Error updating UI:', error.message);
     }
+  }
+
+  updatePowerUpsDisplay(activePowerUps) {
+    if (!this.powerUpsElement) return;
+
+    const now = Date.now();
+    let content = '';
+
+    for (const type in activePowerUps) {
+        const powerUp = activePowerUps[type];
+        const remainingTime = Math.max(0, (powerUp.expiry - now) / 1000);
+        let effectText = '';
+        if (type === 'MultiShot') {
+            const totalProjectiles = 1 + powerUp.count * powerUp.value;
+            effectText = `${type} (${totalProjectiles} Proj)`; // Show total projectiles
+        } else {
+            effectText = `${type} (x${powerUp.count})`; // Default display
+        }
+        content += `<div>${effectText}: ${remainingTime.toFixed(1)}s</div>`;
+    }
+
+    this.powerUpsElement.innerHTML = content;
+    // Optional: Add styling for the power-up list
+    this.powerUpsElement.style.marginTop = '10px';
+    this.powerUpsElement.style.fontSize = '14px';
+    this.powerUpsElement.style.color = '#00ff00'; // Match MultiShot color for now
   }
 
   showTooltip(item, x, y) {
@@ -269,9 +300,25 @@ export class UI {
 
   getItemRarityColor(rarity) {
     switch (rarity) {
-      case 'magic': return '#5555ff';
+      case 'magic': return '#8888ff';
       case 'rare': return '#ffff00';
-      default: return '#ffffff';
+      case 'unique': return '#ff8000';
+      case 'legendary': return '#ff00ff'; // Placeholder
+      default: return '#ffffff'; // Normal
+    }
+  }
+
+  // Added simple level up effect placeholder (can be enhanced)
+  showLevelUpEffect() {
+    const levelText = this.levelTextElement;
+    if (levelText) {
+      levelText.style.transition = 'transform 0.2s, color 0.2s';
+      levelText.style.transform = 'scale(1.2)';
+      levelText.style.color = '#ffff00'; // Flash yellow
+      setTimeout(() => {
+        levelText.style.transform = 'scale(1.0)';
+        levelText.style.color = 'white'; // Reset color
+      }, 200);
     }
   }
 }

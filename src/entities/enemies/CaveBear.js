@@ -13,6 +13,7 @@ export class CaveBear extends Enemy {
     this.attackRange = 1.2; 
     this.attackSpeed = 0.5; // Slow attacks
     this.moveSpeed = 4.8;   // Increased to be slightly slower than base player
+    this.hitRadius = 1.2;   // Larger hit radius for CaveBear
     this.detectionRange = 12; 
     this.xpValue = 50;
     this.type = 'cavebear';
@@ -150,17 +151,31 @@ export class CaveBear extends Enemy {
   die() {
     if (this.isDead) return;
     this.isDead = true;
-    console.log('CaveBear died');
+    console.log(`${this.type} died`);
 
-    if (this.lastDamageSource instanceof Player) {
+    // Grant XP to player
+    if (this.game.player && !this.game.player.isDead) {
       this.game.player.onEnemyKilled(this);
     }
 
-    this.playDeathAnimation();
-    
+    // Try to drop a power-up
+    if (this.game.powerUpManager) {
+        console.log(`[CaveBear.die] Attempting power-up drop...`);
+        this.game.powerUpManager.trySpawnDrop(this.mesh.position, 1.0); // 100% drop chance for testing
+    } else {
+        console.warn(`[CaveBear.die] PowerUpManager not found.`);
+    }
+
+    // Play death animation (specific to CaveBear)
+    this.playDeathAnimation(); 
+
+    // Set timer for removal
     setTimeout(() => {
       this.removeFromScene();
-    }, 1500); // Longer fade for bigger enemy
+      if (this.game.enemyManager) {
+        this.game.enemyManager.removeEnemy(this);
+      }
+    }, 2000); // CaveBear might have a longer animation
   }
   
   playDeathAnimation() {
